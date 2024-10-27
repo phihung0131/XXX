@@ -39,27 +39,37 @@ class Node:
         if os.path.exists(self.config_file):
             with open(self.config_file, 'r') as f:
                 config = json.load(f)
-            self.ip = config['ip']
-            self.port = config['port']
+            # Luôn cập nhật IP, chỉ giữ lại port nếu đã tồn tại
+            self.ip = self.get_ip()
+            self.port = config.get('port', self.get_available_port())
         else:
             self.ip = self.get_ip()
             self.port = self.get_available_port()
-            with open(self.config_file, 'w') as f:
-                json.dump({'ip': self.ip, 'port': self.port}, f)
+        
+        # Luôn lưu cấu hình mới
+        with open(self.config_file, 'w') as f:
+            json.dump({'ip': self.ip, 'port': self.port}, f)
 
     def get_ip(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
+        try:
+            # Tạo một kết nối đến một địa chỉ bên ngoài (ví dụ: Google DNS)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except Exception:
+            # Nếu không thể kết nối, trả về địa chỉ loopback
+            return "127.0.0.1"
 
     def get_available_port(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.bind(('', 0))
-        port = sock.getsockname()[1]
-        sock.close()
-        return port
+        while True:
+            port = random.randint(10000, 65535)
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            result = sock.connect_ex((self.ip, port))
+            sock.close()
+            if result != 0:
+                return port
 
     def parse_magnet(self, magnet_text):
         # Xử lý magnet text
@@ -302,7 +312,7 @@ class Node:
             return None, None
 
     def connect_to_peer(self, peer_ip, peer_port):
-        peer_connection = PeerConnection(self, (peer_ip, peer_port))
+        peer_connection = PeerConnection(self, (peer_ip, peer_port), is_initiator=True)
         peer_connection.start()
         return peer_connection
 
