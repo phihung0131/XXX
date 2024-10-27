@@ -14,19 +14,22 @@ class PeerConnection(threading.Thread):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.is_initiator:
+                print(f"Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
                 self.send_message("HELLO")
             else:
-                self.sock.bind((self.node.ip, self.node.port))
-                self.sock.listen(1)
-                print(f"Seeder: Đang lắng nghe kết nối tại {self.node.ip}:{self.node.port}")
+                self.sock.bind(('0.0.0.0', self.node.port))
+                self.sock.listen(5)
+                print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.node.port}")
                 client_sock, address = self.sock.accept()
                 self.sock = client_sock
                 print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
 
             self.handle_communication()
-        except Exception as e:
+        except ConnectionRefusedError:
+            print(f"Không thể kết nối đến peer {self.peer_address[0]}:{self.peer_address[1]}. Hãy kiểm tra IP và port.")
+        except socket.error as e:
             print(f"Lỗi kết nối với peer {self.peer_address[0]}:{self.peer_address[1]}: {str(e)}")
         finally:
             if self.sock:

@@ -317,7 +317,7 @@ class Node:
         return peer_connection
 
     def start_listening(self):
-        listener = PeerConnection(self, (self.ip, self.port))
+        listener = PeerConnection(self, ('0.0.0.0', self.port), is_initiator=False)
         listener.start()
 
     def find_peer_with_piece(self, peers_data, piece_index):
@@ -327,27 +327,70 @@ class Node:
                     return node  # Trả về node đầu tiên có piece này
         return None
 
-    def connect_and_request_piece(self, peer, piece_index):
-        peer_connection = PeerConnection(self, (peer['ip'], peer['port']))  # Bỏ tham số is_initiator
-        peer_connection.start()
-        peer_connection.request_piece(piece_index)
+    def connect_and_request_piece(self, peer, piece_index, max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                peer_connection = PeerConnection(self, (peer['ip'], peer['port']), is_initiator=True)
+                peer_connection.start()
+                time.sleep(1)  # Đợi kết nối được thiết lập
+                peer_connection.request_piece(piece_index)
+                return peer_connection
+            except Exception as e:
+                print(f"Lỗi kết nối lần {attempt + 1}: {str(e)}")
+                if attempt == max_retries - 1:
+                    print(f"Không thể kết nối với peer {peer['ip']}:{peer['port']} sau {max_retries} lần thử")
+                else:
+                    time.sleep(2)  # Đợi 2 giây trước khi thử lại
+        return None
 
 class PeerConnection(threading.Thread):
-    def __init__(self, node, peer_address):
+    def __init__(self, node, peer_address, is_initiator=True):
         threading.Thread.__init__(self)
         self.node = node
         self.peer_address = peer_address
+        self.is_initiator = is_initiator
+        self.sock = None
 
     def run(self):
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect(self.peer_address)
-            print(f"Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
-            # Thêm logic xử lý kết nối ở đây
-        except Exception as e:
-            print(f"Không thể kết nối với peer {self.peer_address[0]}:{self.peer_address[1]}: {str(e)}")
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if self.is_initiator:
+                print(f"Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
+                self.sock.connect(self.peer_address)
+                print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
+                self.send_message("HELLO")
+            else:
+                self.sock.bind(('0.0.0.0', self.node.port))
+                self.sock.listen(5)
+                print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.node.port}")
+                client_sock, address = self.sock.accept()
+                self.sock = client_sock
+                print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
+
+            self.handle_communication()
+        except ConnectionRefusedError:
+            print(f"Không thể kết nối đến peer {self.peer_address[0]}:{self.peer_address[1]}. Hãy kiểm tra IP và port.")
+        except socket.error as e:
+            print(f"Lỗi kết nối với peer {self.peer_address[0]}:{self.peer_address[1]}: {str(e)}")
         finally:
-            sock.close()
+            if self.sock:
+                self.sock.close()
+
+    def request_piece(self, piece_index):
+        message = json.dumps({"type": "REQUEST_PIECE", "piece_index": piece_index})
+        self.send_message(message)
+
+    def send_message(self, message):
+        self.sock.sendall(message.encode())
+
+    def handle_communication(self):
+        while True:
+            data = self.sock.recv(1024)
+            if not data:
+                break
+            message = data.decode()
+            print(f"Nhận được tin nhắn: {message}")
+            # Xử lý tin nhắn ở đây
 
 class DownloadManager(threading.Thread):
     def __init__(self, node):
@@ -386,6 +429,8 @@ class UserInterface:
     def run(self):
         # Chạy giao diện người dùng
         pass
+
+
 
 
 
