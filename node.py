@@ -312,13 +312,25 @@ class Node:
             return None, None
 
     def connect_to_peer(self, peer_ip, peer_port):
-        peer_connection = PeerConnection(self, (peer_ip, peer_port), is_initiator=True)
+        peer_connection = PeerConnection(self, (peer_ip, peer_port))  # Bỏ tham số is_initiator
         peer_connection.start()
         return peer_connection
 
     def start_listening(self):
         listener = PeerConnection(self, (self.ip, self.port))
         listener.start()
+
+    def find_peer_with_piece(self, peers_data, piece_index):
+        for piece_data in peers_data:
+            if piece_data['piece_index'] == piece_index:
+                for node in piece_data['nodes']:
+                    return node  # Trả về node đầu tiên có piece này
+        return None
+
+    def connect_and_request_piece(self, peer, piece_index):
+        peer_connection = PeerConnection(self, (peer['ip'], peer['port']))  # Bỏ tham số is_initiator
+        peer_connection.start()
+        peer_connection.request_piece(piece_index)
 
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address):
@@ -374,6 +386,9 @@ class UserInterface:
     def run(self):
         # Chạy giao diện người dùng
         pass
+
+
+
 
 
 

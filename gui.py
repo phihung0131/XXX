@@ -63,7 +63,14 @@ class NodeGUI:
                 with open(peers_data_file, 'w') as f:
                     json.dump(peers_data, f, indent=2)
                 print(f"Đã lưu thông tin peers vào {peers_data_file}")
-                messagebox.showinfo("Thông báo", f"Đã lưu danh sách peers vào {peers_data_file} và bắt đầu kết nối")
+                
+                # Kết nối với node đầu tiên có piece 1
+                first_peer = self.node.find_peer_with_piece(peers_data, 0)  # piece index bắt đầu từ 0
+                if first_peer:
+                    self.node.connect_and_request_piece(first_peer, 0)
+                    messagebox.showinfo("Thông báo", f"Đã kết nối với peer {first_peer['ip']}:{first_peer['port']} và yêu cầu piece 1")
+                else:
+                    messagebox.showinfo("Thông báo", "Không tìm thấy peer có piece 1")
             else:
                 error_message = "Không thể lấy danh sách peer. Vui lòng kiểm tra kết nối và magnet link."
                 messagebox.showerror("Lỗi", error_message)

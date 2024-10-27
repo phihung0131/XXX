@@ -15,15 +15,15 @@ class PeerConnection(threading.Thread):
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.is_initiator:
                 self.sock.connect(self.peer_address)
-                print(f"Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
+                print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
                 self.send_message("HELLO")
             else:
                 self.sock.bind((self.node.ip, self.node.port))
                 self.sock.listen(1)
-                print(f"Đang lắng nghe kết nối tại {self.node.ip}:{self.node.port}")
+                print(f"Seeder: Đang lắng nghe kết nối tại {self.node.ip}:{self.node.port}")
                 client_sock, address = self.sock.accept()
                 self.sock = client_sock
-                print(f"Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
+                print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
 
             self.handle_communication()
         except Exception as e:
@@ -46,11 +46,20 @@ class PeerConnection(threading.Thread):
                 break
 
     def process_message(self, message):
-        if message == "HELLO":
-            self.send_message("HELLO_ACK")
-        elif message == "HELLO_ACK":
-            print("Kết nối đã được thiết lập")
-        # Thêm xử lý cho các loại tin nhắn khác ở đây
+        try:
+            msg_data = json.loads(message)
+            if msg_data['type'] == "HELLO":
+                self.send_message(json.dumps({"type": "HELLO_ACK"}))
+            elif msg_data['type'] == "HELLO_ACK":
+                print("Leecher: Kết nối đã được thiết lập")
+            elif msg_data['type'] == "REQUEST_PIECE":
+                print(f"Seeder: Nhận yêu cầu piece {msg_data['piece_index']}")
+                # Thêm logic để gửi piece ở đây
+            elif msg_data['type'] == "PIECE":
+                print(f"Leecher: Nhận được piece {msg_data['piece_index']}")
+                # Thêm logic để xử lý piece nhận được ở đây
+        except json.JSONDecodeError:
+            print(f"Lỗi khi xử lý tin nhắn: {message}")
 
     def send_message(self, message):
         try:
