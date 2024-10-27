@@ -1,0 +1,37 @@
+services:
+  node1:
+    build: .
+    networks:
+      - p2p_network
+    volumes:
+      - ./shared_files:/app/shared_files
+      - ./node1_data:/app/node_data
+    environment:
+      - NODE_ID=1
+
+  node2:
+    build: .
+    networks:
+      - p2p_network
+    volumes:
+      - ./shared_files:/app/shared_files
+      - ./node2_data:/app/node_data
+    environment:
+      - NODE_ID=2
+
+  node3:
+    build: .
+    networks:
+      - p2p_network
+    volumes:
+      - ./shared_files:/app/shared_files
+      - ./node3_data:/app/node_data
+    environment:
+      - NODE_ID=3
+
+networks:
+  p2p_network:
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
