@@ -20,8 +20,17 @@ class PeerConnection(threading.Thread):
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công đến {self.peer_address[0]}:{self.peer_address[1]}")
                 
+                # Bắt đầu thread lắng nghe tin nhắn cho leecher
+                print("Leecher: Khởi động thread lắng nghe")
+                receive_thread = threading.Thread(target=self.receive_messages)
+                receive_thread.daemon = True
+                receive_thread.start()
+                print("Leecher: Thread lắng nghe đã được khởi động")
+                
                 # Gửi HELLO
+                print("Leecher: Chuẩn bị gửi HELLO")
                 self.send_message({"type": "HELLO"})
+                print("Leecher: Đã gửi HELLO, đang đợi phản hồi...")
                 
             else:  # Seeder
                 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -34,17 +43,22 @@ class PeerConnection(threading.Thread):
                 print(f"Seeder: Đã chấp nhận kết nối từ {client_address[0]}:{client_address[1]}")
                 server_socket.close()
 
-            # Bắt đầu thread lắng nghe tin nhắn
-            receive_thread = threading.Thread(target=self.receive_messages)
-            receive_thread.daemon = True
-            receive_thread.start()
+                # Bắt đầu thread lắng nghe tin nhắn cho seeder
+                print("Seeder: Khởi động thread lắng nghe")
+                receive_thread = threading.Thread(target=self.receive_messages)
+                receive_thread.daemon = True
+                receive_thread.start()
+                print("Seeder: Thread lắng nghe đã được khởi động")
 
-            # Giữ kết nối
+            # Giữ thread chính chạy và duy trì kết nối
             while self.running:
+                if not receive_thread.is_alive():
+                    print("Thread lắng nghe đã dừng, kết thúc kết nối")
+                    break
                 threading.Event().wait(1)
 
         except Exception as e:
-            print(f"Lỗi kết nối: {e}")
+            print(f"Lỗi trong run: {e}")
             print(traceback.format_exc())
         finally:
             self.cleanup()
@@ -63,7 +77,7 @@ class PeerConnection(threading.Thread):
 
     def receive_messages(self):
         role = "Leecher" if self.is_initiator else "Seeder"
-        print(f"{role}: Bắt đầu lắng nghe tin nhắn")
+        print(f"{role}: Thread lắng nghe bắt đầu hoạt động")
         while self.running:
             try:
                 print(f"{role}: Đang đợi tin nhắn mới...")
@@ -74,8 +88,7 @@ class PeerConnection(threading.Thread):
                     break
 
                 message = data.decode('utf-8')
-                print(f"{role}: Nhận được dữ liệu thô: {data}")
-                print(f"{role}: Đã giải mã thành: {message}")
+                print(f"{role}: Nhận được tin nhắn: {message}")
                 self.handle_message(json.loads(message))
 
             except Exception as e:
@@ -83,6 +96,8 @@ class PeerConnection(threading.Thread):
                 print(traceback.format_exc())
                 self.running = False
                 break
+
+        print(f"{role}: Thread lắng nghe kết thúc")
 
     def handle_message(self, message_dict):
         try:
