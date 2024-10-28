@@ -2,6 +2,7 @@ import socket
 import threading
 import json
 import hashlib
+import traceback
 
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address):
@@ -74,23 +75,34 @@ class PeerConnection(threading.Thread):
         try:
             print(f"Bắt đầu xử lý tin nhắn: {message}")
             msg_data = json.loads(message)
+            print(f"Đã giải mã JSON thành công: {msg_data}")
+            
             if msg_data['type'] == "HELLO":
                 print(f"Seeder nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
-                response = json.dumps({"type": "HELLO_ACK"})
-                print(f"Seeder chuẩn bị gửi HELLO_ACK đến {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_message(response)
-                print(f"Seeder đã gửi HELLO_ACK")
+                try:
+                    response = json.dumps({"type": "HELLO_ACK"})
+                    print(f"Seeder đã tạo tin nhắn HELLO_ACK: {response}")
+                    print(f"Seeder chuẩn bị gửi HELLO_ACK đến {self.peer_address[0]}:{self.peer_address[1]}")
+                    self.send_message(response)
+                    print(f"Seeder đã hoàn thành việc gửi HELLO_ACK")
+                except Exception as e:
+                    print(f"Lỗi khi seeder xử lý HELLO: {str(e)}")
+                    print(f"Chi tiết stack trace:", traceback.format_exc())
                 
             elif msg_data['type'] == "HELLO_ACK":
                 print(f"Leecher nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
-                print("Bắt đầu yêu cầu piece 0...")
-                request = json.dumps({
-                    "type": "REQUEST_PIECE",
-                    "piece_index": 0
-                })
-                print(f"Leecher chuẩn bị gửi yêu cầu piece 0 đến {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_message(request)
-                print("Leecher đã gửi yêu cầu piece 0")
+                try:
+                    print("Bắt đầu yêu cầu piece 0...")
+                    request = json.dumps({
+                        "type": "REQUEST_PIECE",
+                        "piece_index": 0
+                    })
+                    print(f"Leecher chuẩn bị gửi yêu cầu piece 0 đến {self.peer_address[0]}:{self.peer_address[1]}")
+                    self.send_message(request)
+                    print("Leecher đã gửi yêu cầu piece 0")
+                except Exception as e:
+                    print(f"Lỗi khi leecher xử lý HELLO_ACK: {str(e)}")
+                    print(f"Chi tiết stack trace:", traceback.format_exc())
                 
             elif msg_data['type'] == "REQUEST_PIECE":
                 piece_index = msg_data.get('piece_index')
@@ -125,9 +137,11 @@ class PeerConnection(threading.Thread):
         except json.JSONDecodeError as e:
             print(f"Lỗi khi giải mã JSON: {str(e)}")
             print(f"Tin nhắn gốc gây lỗi: {message}")
+            print(f"Chi tiết stack trace:", traceback.format_exc())
         except Exception as e:
-            print(f"Lỗi trong process_message: {str(e)}")
+            print(f"Lỗi không xác định trong process_message: {str(e)}")
             print(f"Tin nhắn gây lỗi: {message}")
+            print(f"Chi tiết stack trace:", traceback.format_exc())
 
     def request_next_piece(self, retry_piece=None):
         piece_index = retry_piece if retry_piece is not None else self.current_piece
