@@ -11,6 +11,8 @@ class PeerConnection(threading.Thread):
         self.is_initiator = is_initiator
         self.sock = None
         self.running = True
+        self.message_queue = []
+        self.queue_lock = threading.Lock()
 
     def run(self):
         try:
@@ -19,19 +21,6 @@ class PeerConnection(threading.Thread):
                 print(f"Leecher: Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}")
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công đến {self.peer_address[0]}:{self.peer_address[1]}")
-                
-                # Bắt đầu thread lắng nghe tin nhắn cho leecher
-                print("Leecher: Khởi động thread lắng nghe")
-                receive_thread = threading.Thread(target=self.receive_messages)
-                receive_thread.daemon = True
-                receive_thread.start()
-                print("Leecher: Thread lắng nghe đã được khởi động")
-                
-                # Gửi HELLO
-                print("Leecher: Chuẩn bị gửi HELLO")
-                self.send_message({"type": "HELLO"})
-                print("Leecher: Đã gửi HELLO, đang đợi phản hồi...")
-                
             else:  # Seeder
                 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -43,17 +32,24 @@ class PeerConnection(threading.Thread):
                 print(f"Seeder: Đã chấp nhận kết nối từ {client_address[0]}:{client_address[1]}")
                 server_socket.close()
 
-                # Bắt đầu thread lắng nghe tin nhắn cho seeder
-                print("Seeder: Khởi động thread lắng nghe")
-                receive_thread = threading.Thread(target=self.receive_messages)
-                receive_thread.daemon = True
-                receive_thread.start()
-                print("Seeder: Thread lắng nghe đã được khởi động")
+            # Khởi động thread nhận tin nhắn
+            receive_thread = threading.Thread(target=self.receive_messages)
+            receive_thread.daemon = True
+            receive_thread.start()
 
-            # Giữ thread chính chạy và duy trì kết nối
+            # Khởi động thread gửi tin nhắn
+            send_thread = threading.Thread(target=self.process_message_queue)
+            send_thread.daemon = True
+            send_thread.start()
+
+            if self.is_initiator:
+                # Gửi HELLO nếu là leecher
+                self.queue_message({"type": "HELLO"})
+
+            # Giữ thread chính chạy
             while self.running:
-                if not receive_thread.is_alive():
-                    print("Thread lắng nghe đã dừng, kết thúc kết nối")
+                if not (receive_thread.is_alive() and send_thread.is_alive()):
+                    print("Một trong các thread đã dừng, kết thúc kết nối")
                     break
                 threading.Event().wait(1)
 
@@ -63,24 +59,55 @@ class PeerConnection(threading.Thread):
         finally:
             self.cleanup()
 
+    def queue_message(self, message_dict):
+        """Thêm tin nhắn vào hàng đợi để gửi"""
+        with self.queue_lock:
+            self.message_queue.append(message_dict)
+
+    def process_message_queue(self):
+        """Thread xử lý hàng đợi tin nhắn và gửi tin nhắn"""
+        role = "Leecher" if self.is_initiator else "Seeder"
+        print(f"{role}: Thread gửi tin nhắn bắt đầu")
+        
+        while self.running:
+            try:
+                # Kiểm tra và gửi tin nhắn trong hàng đợi
+                with self.queue_lock:
+                    if self.message_queue:
+                        message_dict = self.message_queue.pop(0)
+                        self.send_message(message_dict)
+                
+                # Tránh CPU quá tải
+                threading.Event().wait(0.1)
+                
+            except Exception as e:
+                print(f"{role}: Lỗi xử lý hàng đợi tin nhắn: {e}")
+                print(traceback.format_exc())
+                self.running = False
+                break
+
+        print(f"{role}: Thread gửi tin nhắn kết thúc")
+
     def send_message(self, message_dict):
+        """Gửi tin nhắn trực tiếp qua socket"""
         try:
             message = json.dumps(message_dict)
-            print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Chuẩn bị gửi tin nhắn: {message}")
-            print(f"Socket status: {self.sock}")
+            role = "Leecher" if self.is_initiator else "Seeder"
+            print(f"{role}: Đang gửi tin nhắn: {message}")
             self.sock.sendall(message.encode('utf-8'))
-            print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Đã gửi tin nhắn thành công")
+            print(f"{role}: Đã gửi tin nhắn thành công")
         except Exception as e:
             print(f"Lỗi gửi tin nhắn: {e}")
             print(traceback.format_exc())
             self.running = False
 
     def receive_messages(self):
+        """Thread nhận tin nhắn"""
         role = "Leecher" if self.is_initiator else "Seeder"
         print(f"{role}: Thread lắng nghe bắt đầu hoạt động")
+        
         while self.running:
             try:
-                print(f"{role}: Đang đợi tin nhắn mới...")
                 data = self.sock.recv(1024)
                 if not data:
                     print(f"{role}: Kết nối đã đóng (không có dữ liệu)")
@@ -100,29 +127,40 @@ class PeerConnection(threading.Thread):
         print(f"{role}: Thread lắng nghe kết thúc")
 
     def handle_message(self, message_dict):
+        """Xử lý tin nhắn nhận được"""
         try:
             message_type = message_dict.get('type')
             
             if message_type == "HELLO":
                 if not self.is_initiator:  # Seeder
-                    print("Seeder: Nhận được HELLO, chuẩn bị gửi HELLO_ACK")
-                    try:
-                        self.send_message({"type": "HELLO_ACK"})
-                        print("Seeder: Đã gửi HELLO_ACK")
-                    except Exception as e:
-                        print(f"Seeder: Lỗi khi gửi HELLO_ACK: {e}")
-                        print(traceback.format_exc())
+                    print("Seeder: Nhận được HELLO, gửi HELLO_ACK")
+                    self.queue_message({"type": "HELLO_ACK"})
             
             elif message_type == "HELLO_ACK":
                 if self.is_initiator:  # Leecher
                     print("Leecher: Nhận được HELLO_ACK, kết nối đã được thiết lập")
+                    # Có thể gửi tin nhắn tiếp theo nếu cần
+                    
+            # Xử lý các loại tin nhắn khác tại đây
+            elif message_type == "MESSAGE":
+                print(f"Nhận được tin nhắn: {message_dict.get('content', '')}")
+                # Có thể trả lời tin nhắn nếu cần
+                self.queue_message({
+                    "type": "MESSAGE_ACK",
+                    "content": f"Đã nhận tin nhắn của bạn"
+                })
 
         except Exception as e:
             print(f"Lỗi xử lý tin nhắn: {e}")
             print(traceback.format_exc())
 
     def cleanup(self):
+        """Dọn dẹp và đóng kết nối"""
         if self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
             self.sock.close()
             print("Đã đóng kết nối")
         self.running = False
