@@ -1,134 +1,156 @@
 import socket
 import threading
 import json
-import time
+import traceback
 
-class Node:
-    def __init__(self):
-        self.ip = "127.0.0.1"  # hoặc socket.gethostbyname(socket.gethostname())
-        self.port = 5000
-        self.connections = {}  # Lưu trữ các kết nối đang hoạt động
-        self.server_socket = None
+class PeerConnection(threading.Thread):
+    def __init__(self, node, peer_address, is_initiator=True):
+        threading.Thread.__init__(self)
+        self.node = node
+        self.peer_address = peer_address
+        self.is_initiator = is_initiator
+        self.sock = None
+        self.client_sock = None
+        self.running = True
+        self.connected = threading.Event()  # Thêm flag để theo dõi trạng thái kết nối
 
-    def start_listening(self):
-        """Khởi động server socket để lắng nghe kết nối"""
-        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server_socket.bind((self.ip, self.port))
-        self.server_socket.listen(5)
-        
-        # Thread riêng để lắng nghe kết nối mới
-        listen_thread = threading.Thread(target=self._accept_connections)
-        listen_thread.daemon = True
-        listen_thread.start()
+    def run(self):
+        try:
+            self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            if self.is_initiator:  # Leecher
+                print(f"Leecher: Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
+                self.sock.connect(self.peer_address)
+                print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
+                
+                # Tạo thread lắng nghe cho leecher
+                self.connected.set()  # Đánh dấu đã kết nối thành công
+                listener_thread = threading.Thread(target=self.listen_for_messages, args=(self.sock,))
+                listener_thread.daemon = True
+                listener_thread.start()
+                
+                # Gửi HELLO
+                hello_msg = json.dumps({"type": "HELLO"})
+                print(f"Leecher: Gửi HELLO: {hello_msg}")
+                self.sock.sendall(hello_msg.encode('utf-8'))
+                
+            else:  # Seeder
+                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                self.sock.bind(('0.0.0.0', self.node.port))
+                self.sock.listen(5)
+                print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.node.port}")
+                self.client_sock, address = self.sock.accept()
+                self.peer_address = address
+                print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
+                
+                self.connected.set()  # Đánh dấu đã kết nối thành công
+                # Tạo thread lắng nghe cho seeder
+                listener_thread = threading.Thread(target=self.listen_for_messages, args=(self.client_sock,))
+                listener_thread.daemon = True
+                listener_thread.start()
 
-    def _accept_connections(self):
-        """Xử lý các kết nối đến từ các peer khác"""
-        while True:
+            # Giữ cho thread chính chạy
+            while self.running:
+                threading.Event().wait(1)
+
+        except Exception as e:
+            print(f"Lỗi trong run: {e}")
+            print(traceback.format_exc())
+        finally:
+            self.cleanup()
+
+    def listen_for_messages(self, sock):
+        buffer = ""
+        while self.running:
             try:
-                client_socket, address = self.server_socket.accept()
-                print(f"Accepted connection from {address}")
-                
-                # Tạo thread mới để xử lý kết nối này
-                client_thread = threading.Thread(
-                    target=self._handle_client_connection,
-                    args=(client_socket, address)
-                )
-                client_thread.daemon = True
-                client_thread.start()
-                
-                # Lưu kết nối
-                self.connections[address] = client_socket
-            except Exception as e:
-                print(f"Error accepting connection: {e}")
-                time.sleep(1)
-
-    def _handle_client_connection(self, client_socket, address):
-        """Xử lý tin nhắn từ một client cụ thể"""
-        try:
-            while True:
-                # Nhận dữ liệu
-                data = client_socket.recv(4096)
+                data = sock.recv(1024)
                 if not data:
+                    print("Kết nối đã đóng")
+                    self.running = False
                     break
-                
-                # Xử lý dữ liệu nhận được
-                message = data.decode('utf-8')
-                print(f"Received from {address}: {message}")
-                
-                # Xử lý yêu cầu và gửi phản hồi
-                response = self._process_request(message)
-                
-                # Gửi phản hồi
-                client_socket.send(response.encode('utf-8'))
-                
-        except Exception as e:
-            print(f"Error handling client {address}: {e}")
-        finally:
-            client_socket.close()
-            if address in self.connections:
-                del self.connections[address]
 
-    def _process_request(self, message):
-        """Xử lý yêu cầu và tạo phản hồi"""
+                buffer += data.decode('utf-8')
+                
+                # Xử lý từng tin nhắn hoàn chỉnh
+                while '\n' in buffer:
+                    message, buffer = buffer.split('\n', 1)
+                    print(f"Nhận được tin nhắn: {message}")
+                    self.process_message(message)
+
+            except Exception as e:
+                print(f"Lỗi khi lắng nghe tin nhắn: {e}")
+                self.running = False
+                break
+
+    def send_message(self, message):
+        if not self.connected.is_set():
+            print("Chưa thiết lập kết nối, không thể gửi tin nhắn")
+            return
+            
         try:
-            request = json.loads(message)
-            if request.get('type') == 'piece_request':
-                # Xử lý yêu cầu piece
-                piece_index = request.get('piece_index')
-                # TODO: Thêm logic để lấy piece data
-                return json.dumps({
-                    'type': 'piece_response',
-                    'piece_index': piece_index,
-                    'data': f"Piece data for index {piece_index}"
-                })
+            # Thêm ký tự xuống dòng để phân tách tin nhắn
+            message = message + '\n'
+            if self.is_initiator:
+                self.sock.sendall(message.encode('utf-8'))
+                print(f"Leecher đã gửi: {message.strip()}")
             else:
-                return json.dumps({
-                    'type': 'error',
-                    'message': 'Unknown request type'
-                })
+                if self.client_sock:
+                    self.client_sock.sendall(message.encode('utf-8'))
+                    print(f"Seeder đã gửi: {message.strip()}")
+                else:
+                    print("Không có kết nối client")
         except Exception as e:
-            return json.dumps({
-                'type': 'error',
-                'message': str(e)
-            })
+            print(f"Lỗi khi gửi tin nhắn: {e}")
 
-    def connect_and_request_piece(self, peer, piece_index):
-        """Kết nối tới peer và yêu cầu piece"""
+    def process_message(self, message):
         try:
-            # Tạo socket mới để kết nối
-            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            client_socket.connect((peer['ip'], peer['port']))
+            msg_data = json.loads(message)
             
-            # Gửi yêu cầu piece
-            request = json.dumps({
-                'type': 'piece_request',
-                'piece_index': piece_index
-            })
-            client_socket.send(request.encode('utf-8'))
-            
-            # Nhận phản hồi
-            response = client_socket.recv(4096).decode('utf-8')
-            print(f"Received response: {response}")
-            
-            # Xử lý phản hồi
-            response_data = json.loads(response)
-            if response_data.get('type') == 'piece_response':
-                # TODO: Xử lý piece data nhận được
-                print(f"Got piece {piece_index}")
-            else:
-                print(f"Error: {response_data.get('message')}")
+            if msg_data['type'] == "HELLO":
+                print(f"Seeder: Nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
+                hello_ack = json.dumps({"type": "HELLO_ACK"})
+                print("Seeder: Đang gửi HELLO_ACK...")
+                self.send_message(hello_ack)
                 
-            return response_data
-            
-        except Exception as e:
-            print(f"Error connecting to peer: {e}")
-            return None
-        finally:
-            client_socket.close()
+            elif msg_data['type'] == "HELLO_ACK":
+                print(f"Leecher: Nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
+                request = json.dumps({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": 0
+                })
+                print("Leecher: Đang gửi yêu cầu piece 0...")
+                self.send_message(request)
+                
+            elif msg_data['type'] == "REQUEST_PIECE":
+                piece_index = msg_data['piece_index']
+                print(f"Seeder: Nhận yêu cầu piece {piece_index}")
+                piece_data = json.dumps({
+                    "type": "PIECE_DATA",
+                    "piece_index": piece_index,
+                    "data": f"TEST_PIECE_{piece_index}"
+                })
+                print(f"Seeder: Đang gửi piece {piece_index}...")
+                self.send_message(piece_data)
+                
+            elif msg_data['type'] == "PIECE_DATA":
+                piece_index = msg_data['piece_index']
+                print(f"Leecher: Nhận được piece {piece_index}")
+                next_piece = piece_index + 1
+                request = json.dumps({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": next_piece
+                })
+                print(f"Leecher: Đang gửi yêu cầu piece {next_piece}...")
+                self.send_message(request)
 
-    def stop(self):
-        """Dừng node và đóng tất cả kết nối"""
-        for socket in self.connections.values():
-            socket.close()
-        if self.server_socket:
-            self.server_socket.close()
+        except Exception as e:
+            print(f"Lỗi xử lý tin nhắn: {e}")
+            print(traceback.format_exc())
+
+    def cleanup(self):
+        self.running = False
+        self.connected.clear()  # Đánh dấu đã ngắt kết nối
+        if self.client_sock:
+            self.client_sock.close()
+        if self.sock:
+            self.sock.close()
+        print("Đã đóng tất cả kết nối")
