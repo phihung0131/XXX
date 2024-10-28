@@ -446,16 +446,38 @@ class Node:
             'piece_length': self.piece_length
         }
 
+    def get_torrent_info(self, magnet_link):
+        """Lấy thông tin torrent từ magnet link"""
+        try:
+            # Tìm file decoded JSON tương ứng với magnet link
+            for file_name in os.listdir(self.torrent_dir):
+                if file_name.endswith('_decoded.json'):
+                    file_path = os.path.join(self.torrent_dir, file_name)
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        torrent_info = json.load(f)
+                        return torrent_info
+            print(f"Không tìm thấy thông tin torrent cho magnet link: {magnet_link}")
+            return None
+        except Exception as e:
+            print(f"Lỗi khi lấy thông tin torrent: {str(e)}")
+            return None
+
     def get_piece_data(self, magnet_link, piece_index):
-        # Lấy dữ liệu của piece từ file đã được chia sẻ
-        file_info = self.get_torrent_info(magnet_link)
-        if file_info:
-            file_name = file_info['name']
-            piece_path = os.path.join(self.pieces_dir, file_name, str(piece_index))
-            if os.path.exists(piece_path):
-                with open(piece_path, 'rb') as f:
-                    return f.read()
-        return None
+        """Lấy dữ liệu của piece từ file đã được chia sẻ"""
+        try:
+            file_info = self.get_torrent_info(magnet_link)
+            if file_info:
+                file_name = file_info['name']
+                piece_path = os.path.join(self.pieces_dir, file_name, f"piece_{piece_index}")
+                if os.path.exists(piece_path):
+                    with open(piece_path, 'rb') as f:
+                        return f.read()
+                else:
+                    print(f"Không tìm thấy piece {piece_index} tại {piece_path}")
+            return None
+        except Exception as e:
+            print(f"Lỗi khi lấy dữ liệu piece: {str(e)}")
+            return None
 
     def save_piece(self, piece_index, piece_data):
         # Lưu piece đã nhận được
@@ -566,6 +588,7 @@ class Node:
                          if f.startswith('piece_'))
     
         return [i for i in range(total_pieces) if i not in existing_pieces]
+
 
 
 
