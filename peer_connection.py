@@ -16,26 +16,42 @@ class PeerConnection(threading.Thread):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.is_initiator:
-                print(f"Đang kết nối đến peer (server) tại: {self.peer_address[0]}:{self.peer_address[1]}...")
+                print(f"Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_message("HELLO")
+                self.send_message(json.dumps({"type": "HELLO"}))
             else:
+                self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 self.sock.bind(('0.0.0.0', self.node.port))
                 self.sock.listen(5)
                 print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.node.port}")
                 client_sock, address = self.sock.accept()
-                self.sock = client_sock
                 print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
+                self.sock = client_sock
+                self.peer_address = address
 
-            self.handle_communication()
+            # Xử lý giao tiếp
+            while True:
+                try:
+                    data = self.sock.recv(1024)
+                    if not data:
+                        print("Kết nối đã đóng")
+                        break
+                    message = data.decode('utf-8')
+                    print(f"Nhận được tin nhắn: {message}")
+                    self.process_message(message)
+                except socket.error as e:
+                    print(f"Lỗi khi nhận tin nhắn: {e}")
+                    break
+
         except ConnectionRefusedError:
-            print(f"Không thể kết nối đến peer {self.peer_address[0]}:{self.peer_address[1]}. Hãy kiểm tra IP và port.")
+            print(f"Không thể kết nối đến peer {self.peer_address[0]}:{self.peer_address[1]}")
         except socket.error as e:
-            print(f"Lỗi kết nối với peer {self.peer_address[0]}:{self.peer_address[1]}: {str(e)}")
+            print(f"Lỗi socket: {e}")
         finally:
             if self.sock:
                 self.sock.close()
+                print("Đã đóng kết nối")
 
     def handle_communication(self):
         while True:
