@@ -13,6 +13,7 @@ from peer_connection import PeerConnection
 from download_manager import DownloadManager
 from upload_manager import UploadManager
 from config import tracker_host
+import base64
 
 class Node:
     def __init__(self):
@@ -39,14 +40,14 @@ class Node:
         if os.path.exists(self.config_file):
             with open(self.config_file, 'r') as f:
                 config = json.load(f)
-            # Luôn cập nhật IP, chỉ giữ lại port nếu đã tồn tại
+            # Luôn cập nhật IP và sử dụng port 52229
             self.ip = self.get_ip()
-            self.port = config.get('port', self.get_available_port())
+            self.port = 52229
         else:
             self.ip = self.get_ip()
-            self.port = self.get_available_port()
+            self.port = 52229
         
-        # Luôn lưu cấu hình mới
+        # Lưu cấu hình
         with open(self.config_file, 'w') as f:
             json.dump({'ip': self.ip, 'port': self.port}, f)
 
@@ -63,13 +64,8 @@ class Node:
             return "127.0.0.1"
 
     def get_available_port(self):
-        while True:
-            port = random.randint(10000, 65535)
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            result = sock.connect_ex((self.ip, port))
-            sock.close()
-            if result != 0:
-                return port
+        # Luôn trả về port 52229
+        return 52229
 
     def parse_magnet(self, magnet_text):
         # Xử lý magnet text
@@ -250,8 +246,8 @@ class Node:
             url = f"{self.file_share_url}/peers"
             response = requests.post(url, json=data)
             if response.status_code == 200:
-                peers_data = response.json()
-                return peers_data
+                response_data = response.json()
+                return self.process_magnet_response(response_data)
             else:
                 return None
         except requests.RequestException:
@@ -343,6 +339,46 @@ class Node:
                     time.sleep(2)  # Đợi 2 giây trước khi thử lại
         return None
 
+    def process_magnet_response(self, response_data):
+        if isinstance(response_data, dict):
+            if 'torrentFile' in response_data and 'torrentFileSize' in response_data:
+                try:
+                    # Giải mã base64
+                    torrent_data = base64.b64decode(response_data['torrentFile'])
+                    
+                    # Kiểm tra kích thước
+                    if len(torrent_data) == response_data['torrentFileSize']:
+                        # Lưu file torrent
+                        torrent_file_name = f"{response_data['name']}.torrent"
+                        torrent_path = os.path.join(self.torrent_dir, torrent_file_name)
+                        with open(torrent_path, 'wb') as f:
+                            f.write(torrent_data)
+                        print(f"Đã lưu file torrent: {torrent_path}")
+
+                        # Giải mã và in nội dung torrent
+                        decoded_torrent = bencodepy.decode(torrent_data)
+                        print("Nội dung file torrent sau khi giải mã:")
+                        print(json.dumps(self.decode_bytes_in_dict(decoded_torrent), indent=2))
+
+                        # Lưu nội dung đã giải mã vào file JSON
+                        decoded_json_path = os.path.join(self.torrent_dir, f"{response_data['name']}_decoded.json")
+                        with open(decoded_json_path, 'w', encoding='utf-8') as f:
+                            json.dump(self.decode_bytes_in_dict(decoded_torrent), f, indent=2)
+                        print(f"Đã lưu nội dung giải mã vào: {decoded_json_path}")
+                    else:
+                        print("Kích thước file torrent không khớp")
+                except Exception as e:
+                    print(f"Lỗi khi xử lý file torrent: {str(e)}")
+            else:
+                print("Không tìm thấy torrentFile trong phản hồi từ tracker")
+                print("Nội dung phản hồi:", json.dumps(response_data, indent=2))
+        else:
+            print("Phản hồi không phải là một dictionary")
+            print("Nội dung phản hồi:", response_data)
+        
+        # Trả về danh sách pieces nếu có, nếu không trả về response_data nguyên bản
+        return response_data.get('pieces', response_data) if isinstance(response_data, dict) else response_data
+
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address, is_initiator=True):
         threading.Thread.__init__(self)
@@ -429,6 +465,14 @@ class UserInterface:
     def run(self):
         # Chạy giao diện người dùng
         pass
+
+
+
+
+
+
+
+
 
 
 

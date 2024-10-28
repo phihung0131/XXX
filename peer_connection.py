@@ -14,7 +14,7 @@ class PeerConnection(threading.Thread):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.is_initiator:
-                print(f"Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
+                print(f"Đang kết nối đến peer (server) tại: {self.peer_address[0]}:{self.peer_address[1]}...")
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
                 self.send_message("HELLO")
