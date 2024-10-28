@@ -82,57 +82,63 @@ class PeerConnection(threading.Thread):
                 try:
                     response = json.dumps({"type": "HELLO_ACK"})
                     print(f"Seeder đã tạo tin nhắn HELLO_ACK: {response}")
-                    print(f"Seeder chuẩn bị gửi HELLO_ACK đến {self.peer_address[0]}:{self.peer_address[1]}")
-                    self.send_message(response)
-                    print(f"Seeder đã hoàn thành việc gửi HELLO_ACK")
+                    if hasattr(self, 'client_sock'):
+                        print("Sử dụng client_sock để gửi")
+                        self.client_sock.sendall(response.encode('utf-8'))
+                    else:
+                        print("Sử dụng sock để gửi")
+                        self.sock.sendall(response.encode('utf-8'))
+                    print(f"Seeder đã gửi HELLO_ACK thành công")
                 except Exception as e:
-                    print(f"Lỗi khi seeder xử lý HELLO: {str(e)}")
+                    print(f"Lỗi khi seeder gửi HELLO_ACK: {str(e)}")
                     print(f"Chi tiết stack trace:", traceback.format_exc())
                 
             elif msg_data['type'] == "HELLO_ACK":
                 print(f"Leecher nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
                 try:
-                    print("Bắt đầu yêu cầu piece 0...")
                     request = json.dumps({
                         "type": "REQUEST_PIECE",
                         "piece_index": 0
                     })
-                    print(f"Leecher chuẩn bị gửi yêu cầu piece 0 đến {self.peer_address[0]}:{self.peer_address[1]}")
-                    self.send_message(request)
-                    print("Leecher đã gửi yêu cầu piece 0")
+                    print(f"Leecher gửi yêu cầu piece 0")
+                    self.sock.sendall(request.encode('utf-8'))
                 except Exception as e:
-                    print(f"Lỗi khi leecher xử lý HELLO_ACK: {str(e)}")
+                    print(f"Lỗi khi leecher gửi REQUEST_PIECE: {str(e)}")
                     print(f"Chi tiết stack trace:", traceback.format_exc())
                 
             elif msg_data['type'] == "REQUEST_PIECE":
                 piece_index = msg_data.get('piece_index')
-                print(f"Seeder nhận yêu cầu piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
-                piece_data = self.node.get_piece_data(piece_index)
-                if piece_data:
+                print(f"Seeder nhận yêu cầu piece {piece_index}")
+                try:
+                    piece_data = "TEST_PIECE_DATA"  # Tạm thời dùng dữ liệu test
                     response = json.dumps({
                         "type": "PIECE_DATA",
                         "piece_index": piece_index,
-                        "data": piece_data.decode('latin1')
+                        "data": piece_data
                     })
-                    print(f"Seeder gửi piece {piece_index} cho {self.peer_address[0]}:{self.peer_address[1]}")
-                    self.send_message(response)
-                else:
-                    print(f"Seeder không tìm thấy piece {piece_index}")
-                    
+                    if hasattr(self, 'client_sock'):
+                        self.client_sock.sendall(response.encode('utf-8'))
+                    else:
+                        self.sock.sendall(response.encode('utf-8'))
+                    print(f"Seeder đã gửi piece {piece_index}")
+                except Exception as e:
+                    print(f"Lỗi khi seeder gửi PIECE_DATA: {str(e)}")
+                    print(f"Chi tiết stack trace:", traceback.format_exc())
+                
             elif msg_data['type'] == "PIECE_DATA":
                 piece_index = msg_data.get('piece_index')
-                piece_data = msg_data.get('data').encode('latin1')
-                print(f"Leecher nhận piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
-                self.node.save_piece(piece_index, piece_data)
-                
-                # Yêu cầu piece tiếp theo
-                next_piece = piece_index + 1
-                request = json.dumps({
-                    "type": "REQUEST_PIECE",
-                    "piece_index": next_piece
-                })
-                print(f"Leecher gửi yêu cầu piece {next_piece} đến {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_message(request)
+                print(f"Leecher nhận được piece {piece_index}")
+                try:
+                    # Yêu cầu piece tiếp theo
+                    next_request = json.dumps({
+                        "type": "REQUEST_PIECE",
+                        "piece_index": piece_index + 1
+                    })
+                    self.sock.sendall(next_request.encode('utf-8'))
+                    print(f"Leecher đã yêu cầu piece tiếp theo: {piece_index + 1}")
+                except Exception as e:
+                    print(f"Lỗi khi leecher yêu cầu piece tiếp theo: {str(e)}")
+                    print(f"Chi tiết stack trace:", traceback.format_exc())
 
         except json.JSONDecodeError as e:
             print(f"Lỗi khi giải mã JSON: {str(e)}")
