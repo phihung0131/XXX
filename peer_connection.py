@@ -1,6 +1,7 @@
 import socket
 import threading
 import json
+import hashlib
 
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address):
@@ -8,6 +9,8 @@ class PeerConnection(threading.Thread):
         self.node = node
         self.peer_address = peer_address
         self.sock = None
+        self.total_pieces = 0
+        self.current_piece = 0
 
     def run(self):
         try:
@@ -51,64 +54,57 @@ class PeerConnection(threading.Thread):
         try:
             msg_data = json.loads(message)
             if msg_data['type'] == "HELLO":
+                print(f"Seeder nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
                 self.send_message(json.dumps({"type": "HELLO_ACK"}))
             elif msg_data['type'] == "HELLO_ACK":
-                print("Leecher: Kết nối đã được thiết lập")
-                # Gửi yêu cầu file sau khi kết nối được thiết lập
-                self.request_file_info()
-            elif msg_data['type'] == "REQUEST_FILE_INFO":
-                # Seeder nhận yêu cầu thông tin file
-                magnet_link = msg_data.get('magnet_link')
-                if magnet_link:
-                    file_info = self.node.get_file_info(magnet_link)
-                    self.send_message(json.dumps({
-                        "type": "FILE_INFO",
-                        "file_info": file_info
-                    }))
-            elif msg_data['type'] == "FILE_INFO":
-                # Leecher nhận thông tin file
-                file_info = msg_data.get('file_info')
-                if file_info:
-                    self.start_downloading_pieces(file_info)
+                print(f"Leecher nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
+                # Bắt đầu yêu cầu piece đầu tiên
+                self.request_next_piece()
             elif msg_data['type'] == "REQUEST_PIECE":
-                # Seeder nhận yêu cầu piece
                 piece_index = msg_data.get('piece_index')
-                magnet_link = msg_data.get('magnet_link')
-                if piece_index is not None and magnet_link:
-                    piece_data = self.node.get_piece_data(magnet_link, piece_index)
-                    if piece_data:
-                        self.send_message(json.dumps({
-                            "type": "PIECE_DATA",
-                            "piece_index": piece_index,
-                            "data": piece_data.decode('latin1')
-                        }))
+                print(f"Seeder nhận yêu cầu piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
+                piece_data = self.node.get_piece_data(piece_index)
+                if piece_data:
+                    print(f"Seeder gửi piece {piece_index} cho {self.peer_address[0]}:{self.peer_address[1]}")
+                    self.send_message(json.dumps({
+                        "type": "PIECE_DATA",
+                        "piece_index": piece_index,
+                        "data": piece_data.decode('latin1')
+                    }))
             elif msg_data['type'] == "PIECE_DATA":
-                # Leecher nhận piece data
                 piece_index = msg_data.get('piece_index')
-                piece_data = msg_data.get('data')
-                if piece_index is not None and piece_data:
-                    self.node.save_piece(piece_index, piece_data.encode('latin1'))
-                    print(f"Đã nhận và lưu piece {piece_index}")
+                piece_data = msg_data.get('data').encode('latin1')
+                print(f"Leecher nhận piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
+                
+                # Xác minh hash của piece
+                if self.verify_piece(piece_index, piece_data):
+                    print(f"Piece {piece_index} xác minh thành công")
+                    self.node.save_piece(piece_index, piece_data)
+                    self.current_piece += 1
+                    if self.current_piece < self.total_pieces:
+                        self.request_next_piece()
+                    else:
+                        print("Đã tải xong tất cả pieces")
+                        self.node.combine_pieces()
+                else:
+                    print(f"Piece {piece_index} không hợp lệ, yêu cầu lại")
+                    self.request_next_piece(piece_index)  # Yêu cầu lại piece không hợp lệ
 
         except json.JSONDecodeError:
             print(f"Lỗi khi xử lý tin nhắn: {message}")
 
-    def request_file_info(self):
-        # Gửi yêu cầu thông tin file với magnet link
+    def request_next_piece(self, retry_piece=None):
+        piece_index = retry_piece if retry_piece is not None else self.current_piece
+        print(f"Leecher yêu cầu piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
         self.send_message(json.dumps({
-            "type": "REQUEST_FILE_INFO",
-            "magnet_link": self.node.current_magnet_link
+            "type": "REQUEST_PIECE",
+            "piece_index": piece_index
         }))
 
-    def start_downloading_pieces(self, file_info):
-        # Bắt đầu tải các piece
-        total_pieces = file_info.get('total_pieces', 0)
-        for piece_index in range(total_pieces):
-            self.send_message(json.dumps({
-                "type": "REQUEST_PIECE",
-                "piece_index": piece_index,
-                "magnet_link": self.node.current_magnet_link
-            }))
+    def verify_piece(self, piece_index, piece_data):
+        expected_hash = self.node.get_piece_hash(piece_index)
+        actual_hash = hashlib.sha1(piece_data).hexdigest()
+        return expected_hash == actual_hash
 
     def send_message(self, message):
         try:

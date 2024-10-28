@@ -348,8 +348,8 @@ class Node:
 
                         # Giải mã và in nội dung torrent
                         decoded_torrent = bencodepy.decode(torrent_data)
-                        print("Nội dung file torrent sau khi giải mã:")
-                        print(json.dumps(self.decode_bytes_in_dict(decoded_torrent), indent=2))
+                        # print("Nội dung file torrent sau khi giải mã:")
+                        # print(json.dumps(self.decode_bytes_in_dict(decoded_torrent), indent=2))
 
                         # Lưu nội dung đã giải mã vào file JSON
                         decoded_json_path = os.path.join(self.torrent_dir, f"{response_data['name']}_decoded.json")
@@ -400,6 +400,45 @@ class Node:
                 piece_path = os.path.join(piece_dir, str(piece_index))
                 with open(piece_path, 'wb') as f:
                     f.write(piece_data)
+
+    def get_piece_hash(self, piece_index):
+        # Lấy hash của piece từ file torrent đã giải mã
+        torrent_info = self.get_decoded_torrent_info()
+        if torrent_info and 'pieces' in torrent_info:
+            return torrent_info['pieces'][piece_index]
+        return None
+
+    def get_decoded_torrent_info(self):
+        # Đọc thông tin từ file torrent đã giải mã
+        decoded_path = os.path.join(self.torrent_dir, f"{self.current_file_name}_decoded.json")
+        if os.path.exists(decoded_path):
+            with open(decoded_path, 'r') as f:
+                return json.load(f)
+        return None
+
+    def save_piece(self, piece_index, piece_data):
+        piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
+        os.makedirs(piece_dir, exist_ok=True)
+        piece_path = os.path.join(piece_dir, f"piece_{piece_index}")
+        with open(piece_path, 'wb') as f:
+            f.write(piece_data)
+        print(f"Đã lưu piece {piece_index} vào {piece_path}")
+
+    def combine_pieces(self):
+        piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
+        output_path = os.path.join(self.node_data_dir, "downloads", self.current_file_name)
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        with open(output_path, 'wb') as outfile:
+            piece_index = 0
+            while True:
+                piece_path = os.path.join(piece_dir, f"piece_{piece_index}")
+                if not os.path.exists(piece_path):
+                    break
+                with open(piece_path, 'rb') as piece_file:
+                    outfile.write(piece_file.read())
+                piece_index += 1
+        print(f"Đã ghép file thành công: {output_path}")
 
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address, is_initiator=True):
@@ -487,6 +526,7 @@ class UserInterface:
     def run(self):
         # Chạy giao diện người dùng
         pass
+
 
 
 
