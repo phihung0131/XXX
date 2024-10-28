@@ -155,11 +155,72 @@ class Node:
             time.sleep(120)  # Đợi 2 phút
 
     def share_file(self, file_path, callback=None):
+        """Chia sẻ file với mạng ngang hàng"""
         try:
-            # Lưu thông tin file đã chia sẻ
+            # Tạo và chạy thread xử lý chia sẻ file
+            share_thread = threading.Thread(
+                target=self._share_file_thread,
+                args=(file_path, callback)
+            )
+            share_thread.start()
+            return True
+        except Exception as e:
+            print(f"Lỗi khi khởi tạo chia sẻ file: {e}")
+            return False
+
+    def _share_file_thread(self, file_path, callback):
+        try:
+            # Đọc file và tính toán pieces
+            file_name = os.path.basename(file_path)
+            file_size = os.path.getsize(file_path)
+            total_pieces = math.ceil(file_size / self.piece_length)
+            pieces = b''
+            
+            with open(file_path, 'rb') as f:
+                for i in range(total_pieces):
+                    piece_data = f.read(self.piece_length)
+                    piece_hash = hashlib.sha1(piece_data).digest()
+                    pieces += piece_hash
+                    
+                    # Lưu piece
+                    piece_dir = os.path.join(self.pieces_dir, file_name)
+                    os.makedirs(piece_dir, exist_ok=True)
+                    piece_path = os.path.join(piece_dir, f"piece_{i}")
+                    with open(piece_path, 'wb') as piece_file:
+                        piece_file.write(piece_data)
+                    
+                    if callback:
+                        callback(i + 1, total_pieces)
+
+            # Tạo thông tin torrent
+            info = {
+                b'name': file_name.encode(),
+                b'piece length': self.piece_length,
+                b'pieces': pieces,
+                b'length': file_size
+            }
+            
+            torrent = {
+                b'info': info,
+                b'announce': self.tracker_url.encode()
+            }
+            
+            # Tạo và lưu file torrent
+            torrent_file_name = f"{file_name}.torrent"
+            torrent_path = os.path.join(self.torrent_dir, torrent_file_name)
+            os.makedirs(os.path.dirname(torrent_path), exist_ok=True)
+            with open(torrent_path, 'wb') as f:
+                f.write(bencodepy.encode(torrent))
+                
+            # Tạo magnet link
+            info_hash = hashlib.sha1(bencodepy.encode(info)).hexdigest()
+            magnet_link = f"magnet:?xt=urn:btih:{info_hash}&dn={file_name}"
+            
+            # Lưu thông tin vào shared_files
+            decoded_json_path = os.path.join(self.torrent_dir, f"{file_name}_decoded.json")
             file_info = {
                 'file_path': file_path,
-                'file_name': os.path.basename(file_path),
+                'file_name': file_name,
                 'torrent_path': torrent_path,
                 'decoded_json_path': decoded_json_path,
                 'magnet_link': magnet_link
@@ -167,67 +228,11 @@ class Node:
             self.shared_files[magnet_link] = file_info
             self.save_shared_files()
             
-            return magnet_link, torrent_path
-        except Exception as e:
-            print(f"Lỗi khi chia sẻ file: {e}")
-            return None, None
-
-    def _share_file_thread(self, file_path, callback):
-        try:
-            file_name = os.path.basename(file_path)
-            file_size = os.path.getsize(file_path)
-            pieces = b''
-            
-            total_pieces = math.ceil(file_size / self.piece_length)
-            
-            with open(file_path, 'rb') as f:
-                for piece_index in range(total_pieces):
-                    piece = f.read(self.piece_length)
-                    piece_hash = hashlib.sha1(piece).digest()
-                    pieces += piece_hash
-                    
-                    # Lưu piece vào thư mục lưu trữ
-                    piece_dir = os.path.join(self.pieces_dir, file_name)
-                    os.makedirs(piece_dir, exist_ok=True)
-                    with open(os.path.join(piece_dir, f"{piece_index}_{piece_hash.hex()}"), 'wb') as piece_file:
-                        piece_file.write(piece)
-
-                    if callback:
-                        callback(piece_index + 1, total_pieces)
-
-            info = {
-                'name': file_name,
-                'piece length': self.piece_length,
-                'pieces': pieces,
-                'length': file_size
-            }
-            
-            torrent = {
-                'info': info,
-                'announce': self.tracker_url
-            }
-            
-            # Tạo file torrent
-            torrent_file_name = f"{file_name}.torrent"
-            torrent_path = os.path.abspath(os.path.join(self.torrent_dir, torrent_file_name))
-            print(f"Đang tạo file torrent tại: {torrent_path}")
-            print(f"Thư mục torrent tồn tại: {os.path.exists(os.path.dirname(torrent_path))}")
-            os.makedirs(os.path.dirname(torrent_path), exist_ok=True)
-            with open(torrent_path, 'wb') as f:
-                f.write(bencodepy.encode(torrent))
-            
-            # In ra nội dung file torrent
-            self.print_torrent_content(torrent_path)
-            
-            # Tạo magnet link
-            info_hash = hashlib.sha1(bencodepy.encode(info)).hexdigest()
-            magnet_link = f"magnet:?xt=urn:btih:{info_hash}&dn={file_name}"
-            
             # Gửi thông tin lên tracker
             with open(torrent_path, 'rb') as torrent_file:
                 files = {'torrent_file': torrent_file}
                 data = {
-                    'magnet_text': magnet_link, 
+                    'magnet_text': magnet_link,
                     'name': file_name,
                     'ip': self.ip,
                     'port': str(self.port)
@@ -242,9 +247,9 @@ class Node:
             
             if callback:
                 callback(total_pieces, total_pieces, magnet_link, torrent_path)
+                
         except Exception as e:
             print(f"Lỗi khi chia sẻ file: {str(e)}")
-            import traceback
             traceback.print_exc()
             if callback:
                 callback(0, 0, None, None)
@@ -466,21 +471,36 @@ class Node:
     def get_torrent_info(self, magnet_link):
         """Lấy thông tin torrent từ magnet link"""
         try:
-            # Kiểm tra trong shared files trước
+            # Kiểm tra trong shared files
             if magnet_link in self.shared_files:
                 file_info = self.shared_files[magnet_link]
                 decoded_json_path = file_info['decoded_json_path']
-                if os.path.exists(decoded_json_path):
+                
+                # Nếu file decoded JSON không tồn tại, tạo lại từ file torrent
+                if not os.path.exists(decoded_json_path):
+                    torrent_path = file_info['torrent_path']
+                    if os.path.exists(torrent_path):
+                        with open(torrent_path, 'rb') as f:
+                            torrent_data = bencodepy.decode(f.read())
+                            info = torrent_data[b'info']
+                            pieces = info[b'pieces']
+                            piece_hashes = [pieces[i:i+20].hex() for i in range(0, len(pieces), 20)]
+                            
+                            decoded_info = {
+                                'name': info[b'name'].decode('utf-8'),
+                                'piece length': info[b'piece length'],
+                                'pieces': piece_hashes,
+                                'length': info[b'length']
+                            }
+                            
+                            # Lưu file decoded JSON
+                            with open(decoded_json_path, 'w', encoding='utf-8') as f:
+                                json.dump(decoded_info, f, indent=2)
+                            return decoded_info
+                else:
+                    # Đọc từ file decoded JSON nếu tồn tại
                     with open(decoded_json_path, 'r', encoding='utf-8') as f:
                         return json.load(f)
-            
-            # Nếu không tìm thấy trong shared files, tìm trong thư mục torrent
-            for file_name in os.listdir(self.torrent_dir):
-                if file_name.endswith('_decoded.json'):
-                    file_path = os.path.join(self.torrent_dir, file_name)
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        torrent_info = json.load(f)
-                        return torrent_info
                         
             print(f"Không tìm thấy thông tin torrent cho magnet link: {magnet_link}")
             print(f"Danh sách shared files: {self.shared_files}")
@@ -499,7 +519,9 @@ class Node:
                 piece_path = os.path.join(self.pieces_dir, file_name, f"piece_{piece_index}")
                 if os.path.exists(piece_path):
                     with open(piece_path, 'rb') as f:
-                        return f.read()
+                        piece_data = f.read()
+                        print(f"Đọc piece {piece_index}, kích thước: {len(piece_data)} bytes")
+                        return piece_data
                 else:
                     print(f"Không tìm thấy piece {piece_index} tại {piece_path}")
             return None
@@ -634,6 +656,9 @@ class Node:
                 json.dump(self.shared_files, f, indent=2)
         except Exception as e:
             print(f"Lỗi khi lưu shared files: {e}")
+
+
+
 
 
 

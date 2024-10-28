@@ -2,6 +2,7 @@ import socket
 import threading
 import json
 import traceback
+import base64
 
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address, is_initiator=True):
@@ -145,16 +146,19 @@ class PeerConnection(threading.Thread):
                     magnet_link = message_dict.get('magnet_link')
                     piece_data = self.node.get_piece_data(magnet_link, piece_index)
                     if piece_data:
+                        # Mã hóa piece data bằng base64
+                        encoded_data = base64.b64encode(piece_data).decode('utf-8')
                         self.queue_message({
                             "type": "PIECE_DATA",
                             "piece_index": piece_index,
-                            "data": piece_data.hex()
+                            "data": encoded_data
                         })
             
             elif message_type == "PIECE_DATA":
                 if self.is_initiator:  # Leecher
                     piece_index = message_dict.get('piece_index')
-                    piece_data = bytes.fromhex(message_dict.get('data'))
+                    # Giải mã base64 thành bytes
+                    piece_data = base64.b64decode(message_dict.get('data'))
                     self.node.handle_received_piece(piece_index, piece_data)
 
         except Exception as e:
