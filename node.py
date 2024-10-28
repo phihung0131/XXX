@@ -126,11 +126,11 @@ class Node:
             "port": self.port
         }
         try:
-            print(f"Đang kết nối đến tracker: {self.tracker_url}")
+            # print(f"Đang kết nối đến tracker: {self.tracker_url}")
             response = requests.post(self.tracker_url, json=data, timeout=10)
-            print(f"Phản hồi từ tracker: Status code {response.status_code}")
+            # print(f"Phản hồi từ tracker: Status code {response.status_code}")
             if response.status_code == 200:
-                print("Đã thông báo thành công đến tracker")
+                # print("Đã thông báo thành công đến tracker")
                 return response.json()
             else:
                 print(f"Lỗi khi thông báo đến tracker: {response.status_code}")

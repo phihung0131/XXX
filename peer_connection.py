@@ -127,8 +127,11 @@ class PeerConnection(threading.Thread):
         print(f"{role}: Thread lắng nghe kết thúc")
 
     def handle_message(self, message_dict):
+
         """Xử lý tin nhắn nhận được"""
+        print(f"Nhận được tin nhắn: {message_dict}")
         try:
+
             message_type = message_dict.get('type')
             
             if message_type == "HELLO":
