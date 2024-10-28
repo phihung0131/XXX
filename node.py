@@ -447,6 +447,7 @@ class PeerConnection(threading.Thread):
         self.peer_address = peer_address
         self.is_initiator = is_initiator
         self.sock = None
+        self.running = True
 
     def run(self):
         try:
@@ -455,7 +456,8 @@ class PeerConnection(threading.Thread):
                 print(f"Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_message("HELLO")
+                # Gửi HELLO dưới dạng JSON
+                self.send_message({"type": "HELLO"})
             else:
                 self.sock.bind(('0.0.0.0', self.node.port))
                 self.sock.listen(5)
@@ -470,24 +472,72 @@ class PeerConnection(threading.Thread):
         except socket.error as e:
             print(f"Lỗi kết nối với peer {self.peer_address[0]}:{self.peer_address[1]}: {str(e)}")
         finally:
-            if self.sock:
-                self.sock.close()
+            self.cleanup()
 
     def request_piece(self, piece_index):
-        message = json.dumps({"type": "REQUEST_PIECE", "piece_index": piece_index})
+        message = {"type": "REQUEST_PIECE", "piece_index": piece_index}
         self.send_message(message)
 
     def send_message(self, message):
-        self.sock.sendall(message.encode())
+        """Gửi tin nhắn dưới dạng JSON"""
+        try:
+            if isinstance(message, str):
+                message = {"type": message}  # Chuyển đổi string thành dict nếu cần
+            json_message = json.dumps(message)
+            self.sock.sendall(json_message.encode())
+            print(f"Đã gửi tin nhắn: {json_message}")
+        except Exception as e:
+            print(f"Lỗi khi gửi tin nhắn: {str(e)}")
 
     def handle_communication(self):
-        while True:
-            data = self.sock.recv(1024)
-            if not data:
+        while self.running:
+            try:
+                data = self.sock.recv(1024)
+                if not data:
+                    print("Kết nối đã đóng")
+                    break
+                
+                message = data.decode()
+                print(f"Nhận được tin nhắn: {message}")
+                
+                try:
+                    message_dict = json.loads(message)
+                    self.handle_message(message_dict)
+                except json.JSONDecodeError:
+                    print(f"Tin nhắn không hợp lệ JSON: {message}")
+                    
+            except socket.error as e:
+                print(f"Lỗi trong quá trình nhận tin nhắn: {str(e)}")
                 break
-            message = data.decode()
-            print(f"Nhận được tin nhắn: {message}")
-            # Xử lý tin nhắn ở đây
+
+    def handle_message(self, message_dict):
+        """Xử lý tin nhắn nhận được"""
+        message_type = message_dict.get('type')
+        
+        if message_type == "HELLO":
+            if not self.is_initiator:  # Nếu là seeder
+                print("Nhận được HELLO, gửi HELLO_ACK")
+                self.send_message({"type": "HELLO_ACK"})
+        
+        elif message_type == "HELLO_ACK":
+            if self.is_initiator:  # Nếu là leecher
+                print("Nhận được HELLO_ACK, kết nối đã được thiết lập")
+        
+        elif message_type == "REQUEST_PIECE":
+            piece_index = message_dict.get('piece_index')
+            print(f"Nhận được yêu cầu piece index: {piece_index}")
+            # Xử lý yêu cầu piece ở đây
+
+    def cleanup(self):
+        """Dọn dẹp tài nguyên"""
+        self.running = False
+        if self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
+            self.sock.close()
+            print("Đã đóng kết nối")
 
 class DownloadManager(threading.Thread):
     def __init__(self, node):
