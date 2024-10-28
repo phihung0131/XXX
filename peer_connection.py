@@ -58,8 +58,12 @@ class PeerConnection(threading.Thread):
                 self.send_message(json.dumps({"type": "HELLO_ACK"}))
             elif msg_data['type'] == "HELLO_ACK":
                 print(f"Leecher nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
-                # Bắt đầu yêu cầu piece đầu tiên
-                self.request_next_piece()
+                # Bắt đầu yêu cầu piece 0
+                print("Bắt đầu yêu cầu piece...")
+                self.send_message(json.dumps({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": 0
+                }))
             elif msg_data['type'] == "REQUEST_PIECE":
                 piece_index = msg_data.get('piece_index')
                 print(f"Seeder nhận yêu cầu piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
@@ -75,23 +79,17 @@ class PeerConnection(threading.Thread):
                 piece_index = msg_data.get('piece_index')
                 piece_data = msg_data.get('data').encode('latin1')
                 print(f"Leecher nhận piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
-                
-                # Xác minh hash của piece
-                if self.verify_piece(piece_index, piece_data):
-                    print(f"Piece {piece_index} xác minh thành công")
-                    self.node.save_piece(piece_index, piece_data)
-                    self.current_piece += 1
-                    if self.current_piece < self.total_pieces:
-                        self.request_next_piece()
-                    else:
-                        print("Đã tải xong tất cả pieces")
-                        self.node.combine_pieces()
-                else:
-                    print(f"Piece {piece_index} không hợp lệ, yêu cầu lại")
-                    self.request_next_piece(piece_index)  # Yêu cầu lại piece không hợp lệ
+                self.node.save_piece(piece_index, piece_data)
+                # Yêu cầu piece tiếp theo
+                self.send_message(json.dumps({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": piece_index + 1
+                }))
 
         except json.JSONDecodeError:
             print(f"Lỗi khi xử lý tin nhắn: {message}")
+        except Exception as e:
+            print(f"Lỗi trong process_message: {str(e)}")
 
     def request_next_piece(self, retry_piece=None):
         piece_index = retry_piece if retry_piece is not None else self.current_piece
