@@ -323,21 +323,11 @@ class Node:
                     return node  # Trả về node đầu tiên có piece này
         return None
 
-    def connect_and_request_piece(self, peer, piece_index, max_retries=3):
-        for attempt in range(max_retries):
-            try:
-                peer_connection = PeerConnection(self, (peer['ip'], peer['port']), is_initiator=True)
-                peer_connection.start()
-                time.sleep(1)  # Đợi kết nối được thiết lập
-                peer_connection.request_piece(piece_index)
-                return peer_connection
-            except Exception as e:
-                print(f"Lỗi kết nối lần {attempt + 1}: {str(e)}")
-                if attempt == max_retries - 1:
-                    print(f"Không thể kết nối với peer {peer['ip']}:{peer['port']} sau {max_retries} lần thử")
-                else:
-                    time.sleep(2)  # Đợi 2 giây trước khi thử lại
-        return None
+    def connect_and_request_piece(self, peer, piece_index):
+        self.current_magnet_link = self.current_downloading_magnet  # Lưu magnet link hiện tại
+        peer_connection = PeerConnection(self, (peer['ip'], peer['port']))
+        peer_connection.start()
+        return peer_connection
 
     def process_magnet_response(self, response_data):
         if isinstance(response_data, dict):
@@ -378,6 +368,37 @@ class Node:
         
         # Trả về danh sách pieces nếu có, nếu không trả về response_data nguyên bản
         return response_data.get('pieces', response_data) if isinstance(response_data, dict) else response_data
+
+    def get_file_info(self, magnet_link):
+        # Trả về thông tin về file dựa trên magnet link
+        # Thông tin này có thể được lấy từ file torrent đã được lưu
+        return {
+            'total_pieces': len(self.get_torrent_info(magnet_link)['pieces']),
+            'piece_length': self.piece_length
+        }
+
+    def get_piece_data(self, magnet_link, piece_index):
+        # Lấy dữ liệu của piece từ file đã được chia sẻ
+        file_info = self.get_torrent_info(magnet_link)
+        if file_info:
+            file_name = file_info['name']
+            piece_path = os.path.join(self.pieces_dir, file_name, str(piece_index))
+            if os.path.exists(piece_path):
+                with open(piece_path, 'rb') as f:
+                    return f.read()
+        return None
+
+    def save_piece(self, piece_index, piece_data):
+        # Lưu piece đã nhận được
+        if self.current_magnet_link:
+            file_info = self.get_torrent_info(self.current_magnet_link)
+            if file_info:
+                file_name = file_info['name']
+                piece_dir = os.path.join(self.pieces_dir, file_name)
+                os.makedirs(piece_dir, exist_ok=True)
+                piece_path = os.path.join(piece_dir, str(piece_index))
+                with open(piece_path, 'wb') as f:
+                    f.write(piece_data)
 
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address, is_initiator=True):
@@ -465,6 +486,7 @@ class UserInterface:
     def run(self):
         # Chạy giao diện người dùng
         pass
+
 
 
 
