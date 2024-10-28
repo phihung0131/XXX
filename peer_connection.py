@@ -55,39 +55,53 @@ class PeerConnection(threading.Thread):
             msg_data = json.loads(message)
             if msg_data['type'] == "HELLO":
                 print(f"Seeder nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_message(json.dumps({"type": "HELLO_ACK"}))
+                response = json.dumps({"type": "HELLO_ACK"})
+                print(f"Seeder gửi HELLO_ACK đến {self.peer_address[0]}:{self.peer_address[1]}")
+                self.send_message(response)
+                
             elif msg_data['type'] == "HELLO_ACK":
                 print(f"Leecher nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
-                # Bắt đầu yêu cầu piece 0
-                print("Bắt đầu yêu cầu piece...")
-                self.send_message(json.dumps({
+                print("Bắt đầu yêu cầu piece 0...")
+                request = json.dumps({
                     "type": "REQUEST_PIECE",
                     "piece_index": 0
-                }))
+                })
+                print(f"Leecher gửi yêu cầu piece 0 đến {self.peer_address[0]}:{self.peer_address[1]}")
+                self.send_message(request)
+                
             elif msg_data['type'] == "REQUEST_PIECE":
                 piece_index = msg_data.get('piece_index')
                 print(f"Seeder nhận yêu cầu piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
                 piece_data = self.node.get_piece_data(piece_index)
                 if piece_data:
-                    print(f"Seeder gửi piece {piece_index} cho {self.peer_address[0]}:{self.peer_address[1]}")
-                    self.send_message(json.dumps({
+                    response = json.dumps({
                         "type": "PIECE_DATA",
                         "piece_index": piece_index,
                         "data": piece_data.decode('latin1')
-                    }))
+                    })
+                    print(f"Seeder gửi piece {piece_index} cho {self.peer_address[0]}:{self.peer_address[1]}")
+                    self.send_message(response)
+                else:
+                    print(f"Seeder không tìm thấy piece {piece_index}")
+                    
             elif msg_data['type'] == "PIECE_DATA":
                 piece_index = msg_data.get('piece_index')
                 piece_data = msg_data.get('data').encode('latin1')
                 print(f"Leecher nhận piece {piece_index} từ {self.peer_address[0]}:{self.peer_address[1]}")
                 self.node.save_piece(piece_index, piece_data)
+                
                 # Yêu cầu piece tiếp theo
-                self.send_message(json.dumps({
+                next_piece = piece_index + 1
+                request = json.dumps({
                     "type": "REQUEST_PIECE",
-                    "piece_index": piece_index + 1
-                }))
+                    "piece_index": next_piece
+                })
+                print(f"Leecher gửi yêu cầu piece {next_piece} đến {self.peer_address[0]}:{self.peer_address[1]}")
+                self.send_message(request)
 
-        except json.JSONDecodeError:
-            print(f"Lỗi khi xử lý tin nhắn: {message}")
+        except json.JSONDecodeError as e:
+            print(f"Lỗi khi giải mã JSON: {str(e)}")
+            print(f"Tin nhắn gốc: {message}")
         except Exception as e:
             print(f"Lỗi trong process_message: {str(e)}")
 
