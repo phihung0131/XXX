@@ -14,6 +14,8 @@ class PeerConnection(threading.Thread):
         self.running = True
         self.message_queue = []
         self.queue_lock = threading.Lock()
+        self.buffer = ""  # Buffer để lưu dữ liệu chưa xử lý
+        self.MESSAGE_END = "\n"  # Ký tự kết thúc tin nhắn
 
     def run(self):
         try:
@@ -91,9 +93,10 @@ class PeerConnection(threading.Thread):
     def send_message(self, message_dict):
         """Gửi tin nhắn trực tiếp qua socket"""
         try:
-            message = json.dumps(message_dict)
+            # Thêm ký tự kết thúc vào tin nhắn
+            message = json.dumps(message_dict) + self.MESSAGE_END
             role = "Leecher" if self.is_initiator else "Seeder"
-            print(f"{role}: Đang gửi tin nhắn: {message}")
+            print(f"{role}: Đang gửi tin nhắn: {message.strip()}")
             self.sock.sendall(message.encode('utf-8'))
             print(f"{role}: Đã gửi tin nhắn thành công")
         except Exception as e:
@@ -108,15 +111,21 @@ class PeerConnection(threading.Thread):
         
         while self.running:
             try:
-                data = self.sock.recv(1024)
+                data = self.sock.recv(4096)
                 if not data:
                     print(f"{role}: Kết nối đã đóng (không có dữ liệu)")
                     self.running = False
                     break
 
-                message = data.decode('utf-8')
-                print(f"{role}: Nhận được tin nhắn: {message}")
-                self.handle_message(json.loads(message))
+                # Thêm dữ liệu mới vào buffer
+                self.buffer += data.decode('utf-8')
+                
+                # Xử lý từng tin nhắn trong buffer
+                while self.MESSAGE_END in self.buffer:
+                    message, self.buffer = self.buffer.split(self.MESSAGE_END, 1)
+                    if message:
+                        print(f"{role}: Nhận được tin nhắn: {message}")
+                        self.handle_message(json.loads(message))
 
             except Exception as e:
                 print(f"{role}: Lỗi nhận tin nhắn: {e}")
