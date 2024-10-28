@@ -37,7 +37,8 @@ class Node:
         os.makedirs(self.node_data_dir, exist_ok=True)
         os.makedirs(self.torrent_dir, exist_ok=True)
         os.makedirs(self.pieces_dir, exist_ok=True)
-        self.current_magnet_link = None  # Thêm dòng này
+        self.current_magnet_link = None
+        self.current_file_name = None  # Thêm dòng này
 
     def stop(self):
         self.running = False
@@ -109,7 +110,7 @@ class Node:
         pass
 
     def run(self):
-        print("=========================================================")
+        print("======================VVVVVVVVV=========================")
         print(f"Node đang chạy trên IP: {self.ip}, Port: {self.port}")
         # Thông báo lần đầu đến tracker
         initial_response = self.announce_to_tracker()
@@ -256,8 +257,10 @@ class Node:
                 response_data = response.json()
                 return self.process_magnet_response(response_data)
             else:
+                # print(f"Lỗi khi lấy danh sách peers: {response.status_code}")
                 return None
         except requests.RequestException:
+            # print("Lỗi khi lấy danh sách peers")
             return None
 
     def decode_torrent_file(self, torrent_path):
@@ -335,7 +338,6 @@ class Node:
         peer_connection = PeerConnection(self, (peer['ip'], peer['port']))
         peer_connection.start()
         return peer_connection
-
     def process_magnet_response(self, response_data):
         if isinstance(response_data, dict):
             if 'torrentFile' in response_data and 'torrentFileSize' in response_data:
@@ -352,29 +354,21 @@ class Node:
                             f.write(torrent_data)
                         print(f"Đã lưu file torrent: {torrent_path}")
 
-                        # Giải mã và in nội dung torrent
+                        # Giải mã và lưu nội dung torrent
                         decoded_torrent = bencodepy.decode(torrent_data)
-                        # print("Nội dung file torrent sau khi giải mã:")
-                        # print(json.dumps(self.decode_bytes_in_dict(decoded_torrent), indent=2))
-
-                        # Lưu nội dung đã giải mã vào file JSON
                         decoded_json_path = os.path.join(self.torrent_dir, f"{response_data['name']}_decoded.json")
                         with open(decoded_json_path, 'w', encoding='utf-8') as f:
                             json.dump(self.decode_bytes_in_dict(decoded_torrent), f, indent=2)
-                        print(f"Đã lưu nội dung giải mã vào: {decoded_json_path}")
-                    else:
-                        print("Kích thước file torrent không khớp")
+                        
+                        # Trả về thông tin cần thiết
+                        return {
+                            'name': response_data['name'],
+                            'pieces': response_data.get('pieces', []),
+                            'decoded_torrent': self.decode_bytes_in_dict(decoded_torrent)
+                        }
                 except Exception as e:
                     print(f"Lỗi khi xử lý file torrent: {str(e)}")
-            else:
-                print("Không tìm thấy torrentFile trong phản hồi từ tracker")
-                print("Nội dung phản hồi:", json.dumps(response_data, indent=2))
-        else:
-            print("Phản hồi không phải là một dictionary")
-            print("Nội dung phản hồi:", response_data)
-        
-        # Trả về danh sách pieces nếu có, nếu không trả về response_data nguyên bản
-        return response_data.get('pieces', response_data) if isinstance(response_data, dict) else response_data
+        return response_data
 
     def get_file_info(self, magnet_link):
         # Trả về thông tin về file dựa trên magnet link
@@ -492,58 +486,4 @@ class Node:
                              if f.startswith('piece_'))
         
         return [i for i in range(total_pieces) if i not in existing_pieces]
-
-class UploadManager(threading.Thread):
-    def __init__(self, node):
-        threading.Thread.__init__(self)
-        self.node = node
-
-    def run(self):
-        # Quản lý quá trình upload
-        pass
-
-class UserInterface:
-    def __init__(self, node):
-        self.node = node
-
-    def display_stats(self):
-        # Hiển thị thống kê
-        pass
-
-    def display_peers(self):
-        # Hiển thị thông tin về peers
-        pass
-
-    def display_progress(self):
-        # Hiển thị tiến độ tải/chia sẻ
-        pass
-
-    def run(self):
-        # Chạy giao diện người dùng
-        pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

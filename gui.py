@@ -61,6 +61,11 @@ class NodeGUI:
         if magnet_link:
             peers_data = self.node.get_peers_for_file(magnet_link)
             if peers_data:
+                # Lấy tên file từ peers_data
+                if isinstance(peers_data, dict) and 'name' in peers_data:
+                    self.node.current_file_name = peers_data['name']
+                    self.node.current_magnet_link = magnet_link
+                
                 self.status_label.config(text=f"Đã lấy danh sách peer. Số lượng piece: {len(peers_data)}")
                 peers_data_file = os.path.join(self.node.node_data_dir, 'peers_data.json')
                 with open(peers_data_file, 'w') as f:
@@ -68,7 +73,7 @@ class NodeGUI:
                 print(f"Đã lưu thông tin peers vào {peers_data_file}")
                 
                 # Kết nối với node đầu tiên có piece 1
-                first_peer = self.node.find_peer_with_piece(peers_data, 0)  # piece index bắt đầu từ 0
+                first_peer = self.node.find_peer_with_piece(peers_data, 0)
                 if first_peer:
                     self.node.connect_and_request_piece(first_peer, 0)
                     messagebox.showinfo("Thông báo", f"Đã kết nối với peer {first_peer['ip']}:{first_peer['port']} và yêu cầu piece 1")
