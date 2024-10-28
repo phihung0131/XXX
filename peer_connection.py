@@ -17,46 +17,60 @@ class PeerConnection(threading.Thread):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             if self.is_initiator:
-                print(f"Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
+                print(f"Leecher: Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_message(json.dumps({"type": "HELLO"}))
+                hello_msg = json.dumps({"type": "HELLO"})
+                print(f"Leecher: Gửi HELLO: {hello_msg}")
+                self.sock.sendall(hello_msg.encode('utf-8'))
+                print("Leecher: Đã gửi HELLO, đang đợi phản hồi...")
             else:
                 self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 self.sock.bind(('0.0.0.0', self.node.port))
                 self.sock.listen(5)
                 print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.node.port}")
                 self.client_sock, address = self.sock.accept()
-                print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
                 self.peer_address = address
+                print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
 
             # Xử lý giao tiếp
             while True:
                 try:
                     if self.is_initiator:
+                        print("Leecher: Đang đợi nhận dữ liệu...")
                         data = self.sock.recv(1024)
+                        print(f"Leecher: Đã nhận dữ liệu: {data}")
                     else:
+                        print("Seeder: Đang đợi nhận dữ liệu...")
                         data = self.client_sock.recv(1024)
+                        print(f"Seeder: Đã nhận dữ liệu: {data}")
+
                     if not data:
                         print("Kết nối đã đóng")
                         break
+
                     message = data.decode('utf-8')
                     print(f"Nhận được tin nhắn: {message}")
                     self.process_message(message)
+
                 except socket.error as e:
                     print(f"Lỗi khi nhận tin nhắn: {e}")
+                    print(f"Chi tiết stack trace:", traceback.format_exc())
                     break
 
         except ConnectionRefusedError:
             print(f"Không thể kết nối đến peer {self.peer_address[0]}:{self.peer_address[1]}")
         except socket.error as e:
             print(f"Lỗi socket: {e}")
+            print(f"Chi tiết stack trace:", traceback.format_exc())
         finally:
             if hasattr(self, 'client_sock'):
+                print("Đóng client_sock")
                 self.client_sock.close()
             if self.sock:
+                print("Đóng sock")
                 self.sock.close()
-            print("Đã đóng kết nối")
+            print("Đã đóng tất cả kết nối")
 
     def handle_communication(self):
         while True:
