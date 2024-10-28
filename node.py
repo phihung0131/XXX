@@ -573,6 +573,30 @@ class Node:
             f.write(piece_data)
         print(f"Đã lưu piece {piece_index} vào {piece_path}")
 
+    def announce_all_pieces_to_tracker(self, torrent_info):
+        """Thông báo tất cả piece cho tracker sau khi tải xong"""
+        try:
+            tracker_piece_url = f"{tracker_host}/api/pieces"
+            total_pieces = len(torrent_info['pieces'])
+            
+            for piece_index in range(total_pieces):
+                piece_data = {
+                    "magnet_text": self.current_magnet_link,
+                    "piece_index": str(piece_index),
+                    "ip": self.ip,
+                    "port": str(self.port)
+                }
+                try:
+                    response = requests.put(tracker_piece_url, json=piece_data)
+                    if response.status_code != 200:
+                        print(f"Lỗi khi thông báo piece {piece_index} cho tracker: {response.status_code}")
+                except Exception as e:
+                    print(f"Lỗi khi gửi thông báo piece {piece_index}: {e}")
+                    continue
+            print("Đã thông báo tất cả piece cho tracker")
+        except Exception as e:
+            print(f"Lỗi khi thông báo pieces cho tracker: {e}")
+
     def combine_pieces(self):
         piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
         output_path = os.path.join(self.node_data_dir, "downloads", self.current_file_name)
@@ -588,12 +612,28 @@ class Node:
                     outfile.write(piece_file.read())
                 piece_index += 1
         print(f"Đã ghép file thành công: {output_path}")
+        
+        # Lưu thông tin vào shared_files
+        torrent_info = self.get_decoded_torrent_info()
+        if torrent_info and self.current_magnet_link:
+            file_info = {
+                'file_path': output_path,
+                'file_name': self.current_file_name,
+                'torrent_path': os.path.join(self.torrent_dir, f"{self.current_file_name}.torrent"),
+                'decoded_json_path': os.path.join(self.torrent_dir, f"{self.current_file_name}_decoded.json"),
+                'magnet_link': self.current_magnet_link
+            }
+            self.shared_files[self.current_magnet_link] = file_info
+            self.save_shared_files()
+            
+            # Thông báo tất cả piece cho tracker
+            self.announce_all_pieces_to_tracker(torrent_info)
 
     def handle_received_piece(self, piece_index, piece_data):
         """Xử lý piece nhận được từ peer"""
         # Lấy hash piece từ torrent
         piece_hash = self.get_piece_hash(piece_index)
-        
+            
         # Tính hash của piece nhận được
         received_hash = hashlib.sha1(piece_data).hexdigest()
         
@@ -609,6 +649,23 @@ class Node:
             print(f"Piece {piece_index} không hợp lệ, yêu cầu lại")
             # Gửi lại yêu cầu piece này
             self.request_piece(piece_index)
+            return []
+        # Thông báo piece cho tracker
+        try:
+            tracker_piece_url = f"{tracker_host}/api/pieces"
+            piece_data = {
+                "magnet_text": self.current_magnet_link,
+                "piece_index": str(piece_index),
+                "ip": self.ip,
+                "port": str(self.port)
+            }
+            response = requests.put(tracker_piece_url, json=piece_data)
+            if response.status_code != 200:
+                print(f"Lỗi khi thông báo piece cho tracker: {response.status_code}")
+                print(f"Nội dung phản hồi: {response.text}")
+        except Exception as e:
+            print(f"Lỗi khi gửi thông báo piece lên tracker: {e}")
+
 
     def check_download_complete(self):
         """Kiểm tra xem đã tải đủ các piece chưa"""
@@ -656,6 +713,7 @@ class Node:
                 json.dump(self.shared_files, f, indent=2)
         except Exception as e:
             print(f"Lỗi khi lưu shared files: {e}")
+
 
 
 
