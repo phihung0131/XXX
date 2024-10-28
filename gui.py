@@ -60,6 +60,7 @@ class NodeGUI:
         magnet_link = simpledialog.askstring("Tải file", "Nhập magnet link:")
         if magnet_link:
             peers_data = self.node.get_peers_for_file(magnet_link)
+            print(f"Peers data nhận được: {peers_data}")
             if peers_data:
                 # Lấy tên file từ peers_data
                 if isinstance(peers_data, dict) and 'name' in peers_data:

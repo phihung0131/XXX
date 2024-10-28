@@ -54,7 +54,7 @@ class Node:
             self.ip = self.get_ip()
             self.port = 52229
         
-        # Lưu cấu h��nh
+        # Lưu cấu hnh
         with open(self.config_file, 'w') as f:
             json.dump({'ip': self.ip, 'port': self.port}, f)
 
@@ -251,17 +251,31 @@ class Node:
             "magnet_text": magnet_link
         }
         try:
-            url = f"{self.file_share_url}/peers"
+            url = f"{self.file_share_url}/peers"  # Đảm bảo endpoint đúng
             response = requests.post(url, json=data)
             if response.status_code == 200:
-                response_data = response.json()
-                return self.process_magnet_response(response_data)
-            else:
-                # print(f"Lỗi khi lấy danh sách peers: {response.status_code}")
-                return None
-        except requests.RequestException:
-            # print("Lỗi khi lấy danh sách peers")
-            return None
+                data = response.json()
+                print(f"API Response: {data}")  # Debug log
+                
+                # Giải mã và lưu file torrent
+                if 'torrentFile' in data:
+                    torrent_data = base64.b64decode(data['torrentFile'])
+                    torrent_file_name = f"{data['name']}.torrent"
+                    torrent_path = os.path.join(self.torrent_dir, torrent_file_name)
+                    with open(torrent_path, 'wb') as f:
+                        f.write(torrent_data)
+                    print(f"Đã lưu file torrent: {torrent_path}")
+
+                # Trả về cấu trúc dữ liệu giống hệt API response
+                return {
+                    'name': data['name'],
+                    'pieces': data.get('pieces', []),  # Giữ nguyên cấu trúc pieces từ API
+                    'decoded_torrent': self.decode_torrent_file(torrent_path)[0] if 'torrentFile' in data else None
+                }
+        except Exception as e:
+            print(f"Lỗi khi lấy thông tin peers: {e}")
+            print(f"Chi tiết lỗi: {traceback.format_exc()}")
+        return None
 
     def decode_torrent_file(self, torrent_path):
         with open(torrent_path, 'rb') as f:
@@ -328,13 +342,28 @@ class Node:
 
     def find_peer_with_piece(self, peers_data, piece_index):
         """Tìm peer có piece cần thiết"""
-        if isinstance(peers_data, dict) and 'pieces' in peers_data:
-            pieces = peers_data['pieces']
-            for piece in pieces:
-                if isinstance(piece, dict) and piece.get('piece_index') == piece_index:
-                    nodes = piece.get('nodes', [])
-                    if nodes:
-                        return nodes[0]
+        try:
+            if isinstance(peers_data, dict) and 'pieces' in peers_data:
+                pieces = peers_data['pieces']
+                print(f"Tìm kiếm piece {piece_index} trong danh sách: {pieces}")  # Debug log
+                
+                # Tìm piece theo index
+                for piece in pieces:
+                    if piece.get('piece_index') == piece_index:
+                        nodes = piece.get('nodes', [])
+                        if nodes:
+                            print(f"Tìm thấy peer cho piece {piece_index}: {nodes[0]}")
+                            return nodes[0]
+                
+                print(f"Không tìm thấy peer nào có piece {piece_index}")
+                print(f"Cấu trúc pieces: {pieces}")
+            else:
+                print("Dữ liệu peers không đúng định dạng")
+                print(f"Peers data: {peers_data}")
+        except Exception as e:
+            print(f"Lỗi khi tìm peer: {e}")
+            print(f"Peers data: {peers_data}")
+            print(f"Chi tiết lỗi: {traceback.format_exc()}")
         return None
 
     def connect_and_request_piece(self, peer, piece_index):
@@ -358,21 +387,36 @@ class Node:
                             f.write(torrent_data)
                         print(f"Đã lưu file torrent: {torrent_path}")
 
-                        # Giải mã và lưu nội dung torrent
+                        # Giải mã torrent
                         decoded_torrent = bencodepy.decode(torrent_data)
+                        info = decoded_torrent[b'info']
+                        
+                        # Xử lý pieces
+                        pieces = info[b'pieces']
+                        piece_hashes = [pieces[i:i+20].hex() for i in range(0, len(pieces), 20)]
+                        
+                        # Tạo thông tin torrent đã giải mã
+                        decoded_info = {
+                            'name': info[b'name'].decode('utf-8'),
+                            'piece length': info[b'piece length'],
+                            'pieces': piece_hashes,
+                            'length': info[b'length']
+                        }
+                        
+                        # Lưu thông tin đã giải mã
                         decoded_json_path = os.path.join(self.torrent_dir, f"{response_data['name']}_decoded.json")
                         with open(decoded_json_path, 'w', encoding='utf-8') as f:
-                            json.dump(self.decode_bytes_in_dict(decoded_torrent), f, indent=2)
+                            json.dump(decoded_info, f, indent=2)
                         
-                        # Trả về thông tin cần thiết
                         return {
                             'name': response_data['name'],
-                            'pieces': response_data.get('pieces', []),
-                            'decoded_torrent': self.decode_bytes_in_dict(decoded_torrent)
+                            'pieces': piece_hashes,
+                            'decoded_torrent': decoded_info
                         }
                 except Exception as e:
                     print(f"Lỗi khi xử lý file torrent: {str(e)}")
-        return response_data
+                    print(traceback.format_exc())
+        return None
 
     def get_file_info(self, magnet_link):
         # Trả về thông tin về file dựa trên magnet link
@@ -413,12 +457,21 @@ class Node:
         return None
 
     def get_decoded_torrent_info(self):
-        # Đọc thông tin từ file torrent đã giải mã
-        decoded_path = os.path.join(self.torrent_dir, f"{self.current_file_name}_decoded.json")
-        if os.path.exists(decoded_path):
-            with open(decoded_path, 'r') as f:
-                return json.load(f)
-        return None
+        try:
+            decoded_path = os.path.join(self.torrent_dir, f"{self.current_file_name}_decoded.json")
+            if os.path.exists(decoded_path):
+                with open(decoded_path, 'r') as f:
+                    torrent_info = json.load(f)
+                    if 'pieces' not in torrent_info:
+                        print("Lỗi: Không tìm thấy thông tin pieces trong file torrent đã giải mã")
+                        return None
+                    return torrent_info
+            else:
+                print(f"Lỗi: Không tìm thấy file {decoded_path}")
+                return None
+        except Exception as e:
+            print(f"Lỗi khi đọc thông tin torrent: {str(e)}")
+            return None
 
     def save_piece(self, piece_index, piece_data):
         piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
@@ -490,5 +543,8 @@ class Node:
                              if f.startswith('piece_'))
         
         return [i for i in range(total_pieces) if i not in existing_pieces]
+
+
+
 
 
