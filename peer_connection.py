@@ -18,136 +18,102 @@ class PeerConnection(threading.Thread):
     def run(self):
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            
-            if self.is_initiator:
-                # Leecher mode
+            if self.is_initiator:  # Leecher
                 print(f"Leecher: Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}...")
                 self.sock.connect(self.peer_address)
-                self.active_socket = self.sock
                 print(f"Leecher: Đã kết nối thành công với peer: {self.peer_address[0]}:{self.peer_address[1]}")
-                self.send_hello()
-            else:
-                # Seeder mode
+                hello_msg = json.dumps({"type": "HELLO"})
+                print(f"Leecher: Gửi HELLO: {hello_msg}")
+                self.sock.sendall(hello_msg.encode('utf-8'))
+                print("Leecher: Đã gửi HELLO, đang đợi phản hồi...")
+            else:  # Seeder
                 self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                self.sock.bind(('0.0.0.0', self.peer_address[1]))
+                self.sock.bind(('0.0.0.0', self.node.port))
                 self.sock.listen(5)
-                print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.peer_address[1]}")
-                client_sock, address = self.sock.accept()
-                self.active_socket = client_sock
+                print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.node.port}")
+                self.client_sock, address = self.sock.accept()
                 self.peer_address = address
                 print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
 
-            # Unified communication handling
-            self.handle_communication()
+            # Xử lý giao tiếp
+            while True:
+                try:
+                    if self.is_initiator:  # Leecher
+                        print("Leecher: Đang đợi nhận dữ liệu...")
+                        data = self.sock.recv(1024)
+                    else:  # Seeder
+                        print("Seeder: Đang đợi nhận dữ liệu...")
+                        data = self.client_sock.recv(1024)
 
-        except ConnectionRefusedError:
-            print(f"Không thể kết nối đến peer {self.peer_address[0]}:{self.peer_address[1]}")
-        except socket.error as e:
-            print(f"Lỗi socket: {e}")
-            print(f"Chi tiết stack trace:", traceback.format_exc())
-        finally:
-            self.cleanup()
+                    if not data:
+                        print("Kết nối đã đóng")
+                        break
 
-    def send_hello(self):
-        """Gửi tin nhắn HELLO ban đầu từ leecher"""
-        hello_msg = json.dumps({"type": "HELLO"})
-        print(f"Leecher: Gửi HELLO: {hello_msg}")
-        self.send_message(hello_msg)
+                    message = data.decode('utf-8')
+                    print(f"Nhận được tin nhắn: {message}")
+                    self.process_message(message)
 
-    def handle_communication(self):
-        """Xử lý giao tiếp thống nhất cho cả leecher và seeder"""
-        while True:
-            try:
-                data = self.active_socket.recv(4096)  # Tăng buffer size
-                if not data:
-                    print("Kết nối đã đóng")
+                except socket.error as e:
+                    print(f"Lỗi khi nhận tin nhắn: {e}")
                     break
 
-                message = data.decode('utf-8')
-                print(f"Nhận được tin nhắn: {message}")
-                self.process_message(message)
-
-            except socket.error as e:
-                print(f"Lỗi khi nhận tin nhắn: {e}")
-                print(f"Chi tiết stack trace:", traceback.format_exc())
-                break
+        except Exception as e:
+            print(f"Lỗi: {e}")
+        finally:
+            if hasattr(self, 'client_sock'):
+                self.client_sock.close()
+            if self.sock:
+                self.sock.close()
+            print("Đã đóng kết nối")
 
     def process_message(self, message):
         try:
-            print(f"Bắt đầu xử lý tin nhắn: {message}")
             msg_data = json.loads(message)
             
             if msg_data['type'] == "HELLO":
-                print(f"Seeder nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
-                response = json.dumps({"type": "HELLO_ACK"})
-                print(f"Seeder gửi HELLO_ACK")
-                self.send_message(response)
+                print(f"Seeder: Nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
+                # Gửi HELLO_ACK
+                hello_ack = json.dumps({"type": "HELLO_ACK"})
+                print("Seeder: Đang gửi HELLO_ACK...")
+                self.client_sock.sendall(hello_ack.encode('utf-8'))
+                print("Seeder: Đã gửi HELLO_ACK")
                 
             elif msg_data['type'] == "HELLO_ACK":
-                print(f"Leecher nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
-                # Bắt đầu yêu cầu piece đầu tiên
-                self.request_piece(0)
+                print(f"Leecher: Nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
+                # Gửi yêu cầu piece đầu tiên
+                request = json.dumps({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": 0
+                })
+                print("Leecher: Đang gửi yêu cầu piece 0...")
+                self.sock.sendall(request.encode('utf-8'))
+                print("Leecher: Đã gửi yêu cầu piece 0")
                 
             elif msg_data['type'] == "REQUEST_PIECE":
                 piece_index = msg_data['piece_index']
-                print(f"Seeder nhận yêu cầu piece {piece_index}")
-                # Lấy dữ liệu piece từ node
-                piece_data = self.node.get_piece_data(self.node.current_magnet_link, piece_index)
-                if piece_data:
-                    response = json.dumps({
-                        "type": "PIECE_DATA",
-                        "piece_index": piece_index,
-                        "data": piece_data.hex()  # Convert bytes to hex string
-                    })
-                    self.send_message(response)
+                print(f"Seeder: Nhận yêu cầu piece {piece_index}")
+                # Gửi piece data (tạm thời dùng dữ liệu test)
+                piece_data = json.dumps({
+                    "type": "PIECE_DATA",
+                    "piece_index": piece_index,
+                    "data": f"TEST_PIECE_{piece_index}"
+                })
+                print(f"Seeder: Đang gửi piece {piece_index}...")
+                self.client_sock.sendall(piece_data.encode('utf-8'))
+                print(f"Seeder: Đã gửi piece {piece_index}")
                 
             elif msg_data['type'] == "PIECE_DATA":
                 piece_index = msg_data['piece_index']
-                piece_data = bytes.fromhex(msg_data['data'])  # Convert hex string back to bytes
-                print(f"Leecher nhận được piece {piece_index}")
-                
-                # Lưu piece
-                self.node.save_piece(piece_index, piece_data)
-                
+                print(f"Leecher: Nhận được piece {piece_index}")
                 # Yêu cầu piece tiếp theo
                 next_piece = piece_index + 1
-                if next_piece < self.total_pieces:
-                    self.request_piece(next_piece)
-                else:
-                    print("Đã tải xong tất cả pieces")
-                    self.node.combine_pieces()
+                request = json.dumps({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": next_piece
+                })
+                print(f"Leecher: Đang gửi yêu cầu piece {next_piece}...")
+                self.sock.sendall(request.encode('utf-8'))
+                print(f"Leecher: Đã gửi yêu cầu piece {next_piece}")
 
-        except json.JSONDecodeError as e:
-            print(f"Lỗi khi giải mã JSON: {str(e)}")
-            print(f"Tin nhắn gốc: {message}")
         except Exception as e:
-            print(f"Lỗi trong process_message: {str(e)}")
-            print(f"Chi tiết:", traceback.format_exc())
-
-    def send_message(self, message):
-        """Gửi tin nhắn qua socket đang active"""
-        try:
-            if isinstance(message, str):
-                message = message.encode('utf-8')
-            self.active_socket.sendall(message)
-            print(f"Đã gửi tin nhắn thành công: {message}")
-        except Exception as e:
-            print(f"Lỗi khi gửi tin nhắn: {str(e)}")
-            raise
-
-    def request_piece(self, piece_index):
-        """Gửi yêu cầu piece"""
-        request = json.dumps({
-            "type": "REQUEST_PIECE",
-            "piece_index": piece_index
-        })
-        print(f"Leecher gửi yêu cầu piece {piece_index}")
-        self.send_message(request)
-
-    def cleanup(self):
-        """Dọn dẹp tài nguyên"""
-        if self.active_socket:
-            self.active_socket.close()
-        if self.sock:
-            self.sock.close()
-        print("Đã đóng tất cả kết nối")
+            print(f"Lỗi xử lý tin nhắn: {e}")
