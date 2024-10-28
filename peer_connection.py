@@ -126,11 +126,7 @@ class PeerConnection(threading.Thread):
         print(f"{role}: Thread lắng nghe kết thúc")
 
     def handle_message(self, message_dict):
-
-        """Xử lý tin nhắn nhận được"""
-        # print(f"Nhận được tin nhắn: {message_dict}")
         try:
-
             message_type = message_dict.get('type')
             
             if message_type == "HELLO":
@@ -140,21 +136,40 @@ class PeerConnection(threading.Thread):
             
             elif message_type == "HELLO_ACK":
                 if self.is_initiator:  # Leecher
-                    print("Leecher: Nhận được HELLO_ACK, kết nối đã được thiết lập")
-                    # Có thể gửi tin nhắn tiếp theo nếu cần
-                    
-            # Xử lý các loại tin nhắn khác tại đây
-            elif message_type == "MESSAGE":
-                print(f"Nhận được tin nhắn: {message_dict.get('content', '')}")
-                # Có thể trả lời tin nhắn nếu cần
-                self.queue_message({
-                    "type": "MESSAGE_ACK",
-                    "content": f"Đã nhận tin nhắn của bạn"
-                })
+                    print("Leecher: Nhận được HELLO_ACK, bắt đầu yêu cầu piece")
+                    self.request_pieces()
+            
+            elif message_type == "REQUEST_PIECE":
+                if not self.is_initiator:  # Seeder
+                    piece_index = message_dict.get('piece_index')
+                    magnet_link = message_dict.get('magnet_link')
+                    piece_data = self.node.get_piece_data(magnet_link, piece_index)
+                    if piece_data:
+                        self.queue_message({
+                            "type": "PIECE_DATA",
+                            "piece_index": piece_index,
+                            "data": piece_data.hex()
+                        })
+            
+            elif message_type == "PIECE_DATA":
+                if self.is_initiator:  # Leecher
+                    piece_index = message_dict.get('piece_index')
+                    piece_data = bytes.fromhex(message_dict.get('data'))
+                    self.node.handle_received_piece(piece_index, piece_data)
 
         except Exception as e:
             print(f"Lỗi xử lý tin nhắn: {e}")
             print(traceback.format_exc())
+
+    def request_pieces(self):
+        """Yêu cầu các piece còn thiếu"""
+        needed_pieces = self.node.get_needed_pieces()
+        for piece_index in needed_pieces:
+            self.queue_message({
+                "type": "REQUEST_PIECE",
+                "piece_index": piece_index,
+                "magnet_link": self.node.current_magnet_link
+            })
 
     def cleanup(self):
         """Dọn dẹp và đóng kết nối"""

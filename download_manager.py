@@ -55,9 +55,16 @@ class DownloadManager(threading.Thread):
         return all(download_info['pieces'])
 
     def finish_download(self, magnet_link, download_info):
-        # Implement logic to combine all pieces and verify the complete file
-        print(f"Download complete for {magnet_link}")
-        del self.downloading[magnet_link]
+        """Hoàn thành quá trình tải"""
+        try:
+            # Ghép các piece thành file hoàn chỉnh
+            self.combine_pieces(magnet_link, download_info)
+            print(f"Đã tải xong file: {download_info['file_name']}")
+        except Exception as e:
+            print(f"Lỗi khi hoàn thành tải file: {e}")
+        finally:
+            # Xóa thông tin download
+            del self.downloading[magnet_link]
 
     def piece_received(self, magnet_link, piece_index, piece_data):
         download_info = self.downloading.get(magnet_link)
@@ -78,3 +85,21 @@ class DownloadManager(threading.Thread):
         os.makedirs(piece_dir, exist_ok=True)
         with open(os.path.join(piece_dir, f"{piece_index}"), 'wb') as f:
             f.write(piece_data)
+
+    def handle_piece_received(self, magnet_link, piece_index, piece_data):
+        """Xử lý piece nhận được"""
+        if magnet_link in self.downloading:
+            download_info = self.downloading[magnet_link]
+            
+            # Verify piece hash
+            if self.verify_piece(piece_data, download_info['piece_hashes'][piece_index]):
+                # Lưu piece
+                self.save_piece(magnet_link, piece_index, piece_data)
+                download_info['pieces'][piece_index] = True
+                
+                # Kiểm tra nếu đã tải xong
+                if self.is_download_complete(download_info):
+                    self.finish_download(magnet_link, download_info)
+            else:
+                # Yêu cầu lại piece không hợp lệ
+                self.request_piece(magnet_link, piece_index)

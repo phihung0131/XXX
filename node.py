@@ -109,7 +109,7 @@ class Node:
         pass
 
     def run(self):
-        print("V X1")
+        print("=========================================================")
         print(f"Node đang chạy trên IP: {self.ip}, Port: {self.port}")
         # Thông báo lần đầu đến tracker
         initial_response = self.announce_to_tracker()
@@ -446,6 +446,53 @@ class Node:
                 piece_index += 1
         print(f"Đã ghép file thành công: {output_path}")
 
+    def handle_received_piece(self, piece_index, piece_data):
+        """Xử lý piece nhận được từ peer"""
+        # Lấy hash piece từ torrent
+        piece_hash = self.get_piece_hash(piece_index)
+        
+        # Tính hash của piece nhận được
+        received_hash = hashlib.sha1(piece_data).hexdigest()
+        
+        if piece_hash == received_hash:
+            print(f"Piece {piece_index} hợp lệ, lưu trữ")
+            self.save_piece(piece_index, piece_data)
+            
+            # Kiểm tra nếu đã nhận đủ piece
+            if self.check_download_complete():
+                print("Đã nhận đủ các piece, bắt đầu ghép file")
+                self.combine_pieces()
+        else:
+            print(f"Piece {piece_index} không hợp lệ, yêu cầu lại")
+            # Gửi lại yêu cầu piece này
+            self.request_piece(piece_index)
+
+    def check_download_complete(self):
+        """Kiểm tra xem đã tải đủ các piece chưa"""
+        piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
+        if not os.path.exists(piece_dir):
+            return False
+            
+        torrent_info = self.get_decoded_torrent_info()
+        total_pieces = len(torrent_info['pieces'])
+        
+        existing_pieces = [f for f in os.listdir(piece_dir) if f.startswith('piece_')]
+        return len(existing_pieces) == total_pieces
+
+    def get_needed_pieces(self):
+        """Lấy danh sách các piece còn thiếu"""
+        piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
+        if not os.path.exists(piece_dir):
+            os.makedirs(piece_dir)
+            
+        torrent_info = self.get_decoded_torrent_info()
+        total_pieces = len(torrent_info['pieces'])
+        
+        existing_pieces = set(int(f.split('_')[1]) for f in os.listdir(piece_dir) 
+                             if f.startswith('piece_'))
+        
+        return [i for i in range(total_pieces) if i not in existing_pieces]
+
 class UploadManager(threading.Thread):
     def __init__(self, node):
         threading.Thread.__init__(self)
@@ -474,6 +521,7 @@ class UserInterface:
     def run(self):
         # Chạy giao diện người dùng
         pass
+
 
 
 
