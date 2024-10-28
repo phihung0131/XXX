@@ -25,15 +25,17 @@ class PeerConnection(threading.Thread):
                 self.sock.bind(('0.0.0.0', self.node.port))
                 self.sock.listen(5)
                 print(f"Seeder: Đang lắng nghe kết nối tại 0.0.0.0:{self.node.port}")
-                client_sock, address = self.sock.accept()
+                self.client_sock, address = self.sock.accept()
                 print(f"Seeder: Đã chấp nhận kết nối từ: {address[0]}:{address[1]}")
-                self.sock = client_sock
                 self.peer_address = address
 
             # Xử lý giao tiếp
             while True:
                 try:
-                    data = self.sock.recv(1024)
+                    if self.is_initiator:
+                        data = self.sock.recv(1024)
+                    else:
+                        data = self.client_sock.recv(1024)
                     if not data:
                         print("Kết nối đã đóng")
                         break
@@ -49,9 +51,11 @@ class PeerConnection(threading.Thread):
         except socket.error as e:
             print(f"Lỗi socket: {e}")
         finally:
+            if hasattr(self, 'client_sock'):
+                self.client_sock.close()
             if self.sock:
                 self.sock.close()
-                print("Đã đóng kết nối")
+            print("Đã đóng kết nối")
 
     def handle_communication(self):
         while True:
@@ -141,7 +145,10 @@ class PeerConnection(threading.Thread):
     def send_message(self, message):
         try:
             print(f"Đang cố gắng gửi tin nhắn: {message}")
-            self.sock.sendall(message.encode('utf-8'))
+            if self.is_initiator:
+                self.sock.sendall(message.encode('utf-8'))
+            else:
+                self.client_sock.sendall(message.encode('utf-8'))
             print(f"Đã gửi tin nhắn thành công: {message}")
         except Exception as e:
             print(f"Lỗi khi gửi tin nhắn: {str(e)}")
