@@ -9,7 +9,7 @@ class DownloadManager(threading.Thread):
         self.downloading = {}
 
     def run(self):
-        while True:
+        while self.node.running:  # Thay vì while True
             # Kiểm tra các file đang tải
             for magnet_link, download_info in list(self.downloading.items()):
                 if self.is_download_complete(download_info):

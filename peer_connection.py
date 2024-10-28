@@ -47,15 +47,14 @@ class PeerConnection(threading.Thread):
                 self.queue_message({"type": "HELLO"})
 
             # Giữ thread chính chạy
-            while self.running:
+            while self.node.running:  # Thay vì while self.running
                 if not (receive_thread.is_alive() and send_thread.is_alive()):
                     print("Một trong các thread đã dừng, kết thúc kết nối")
                     break
                 threading.Event().wait(1)
 
         except Exception as e:
-            print(f"Lỗi trong run: {e}")
-            print(traceback.format_exc())
+            print(f"Lỗi trong peer connection: {e}")
         finally:
             self.cleanup()
 

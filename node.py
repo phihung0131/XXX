@@ -17,6 +17,8 @@ import base64
 
 class Node:
     def __init__(self):
+        # Thêm vào đầu __init__
+        self.running = True
         self.config_file = 'node_config.json'
         self.load_or_create_config()
         self.peers = []
@@ -36,6 +38,9 @@ class Node:
         os.makedirs(self.torrent_dir, exist_ok=True)
         os.makedirs(self.pieces_dir, exist_ok=True)
         self.current_magnet_link = None  # Thêm dòng này
+
+    def stop(self):
+        self.running = False
 
     def load_or_create_config(self):
         if os.path.exists(self.config_file):
@@ -104,6 +109,7 @@ class Node:
         pass
 
     def run(self):
+        print("V X1")
         print(f"Node đang chạy trên IP: {self.ip}, Port: {self.port}")
         # Thông báo lần đầu đến tracker
         initial_response = self.announce_to_tracker()
@@ -140,7 +146,7 @@ class Node:
             print(f"Chi tiết lỗi: {str(e)}")
 
     def periodic_announce(self):
-        while True:
+        while self.running:  # Thay vì while True
             self.announce_to_tracker()
             time.sleep(120)  # Đợi 2 phút
 
@@ -439,15 +445,6 @@ class Node:
                     outfile.write(piece_file.read())
                 piece_index += 1
         print(f"Đã ghép file thành công: {output_path}")
-
-class DownloadManager(threading.Thread):
-    def __init__(self, node):
-        threading.Thread.__init__(self)
-        self.node = node
-
-    def run(self):
-        # Quản lý quá trình tải
-        pass
 
 class UploadManager(threading.Thread):
     def __init__(self, node):

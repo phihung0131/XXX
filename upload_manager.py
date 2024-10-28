@@ -6,5 +6,6 @@ class UploadManager(threading.Thread):
         self.node = node
 
     def run(self):
-        # Quản lý quá trình upload
-        pass
+        while self.node.running:  # Thay vì while True
+            # Quản lý quá trình upload
+            threading.Event().wait(5)

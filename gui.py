@@ -11,6 +11,9 @@ class NodeGUI:
         self.node = Node()
         master.title("P2P File Sharing")
 
+        # Thêm xử lý sự kiện đóng cửa sổ
+        master.protocol("WM_DELETE_WINDOW", self.on_closing)
+
         self.share_button = tk.Button(master, text="Chia sẻ file", command=self.share_file)
         self.share_button.pack()
 
@@ -82,6 +85,13 @@ class NodeGUI:
             temp_dir, piece_hashes = self.node.analyze_torrent(os.path.basename(torrent_file_name))
             if temp_dir and piece_hashes:
                 messagebox.showinfo("Phân tích Torrent", f"Kết quả phân tích đã được lưu trong thư mục: {temp_dir}")
+
+    def on_closing(self):
+        if messagebox.askokcancel("Thoát", "Bạn có muốn thoát không?"):
+            print("Đang dừng tất cả các thread...")
+            self.node.stop()  # Dừng node và các thread con
+            self.master.destroy()  # Đóng cửa sổ
+            os._exit(0)  # Kết thúc toàn bộ chương trình
 
 def main():
     root = tk.Tk()
