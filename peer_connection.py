@@ -68,12 +68,14 @@ class PeerConnection(threading.Thread):
 
     def process_message(self, message):
         try:
+            print(f"Bắt đầu xử lý tin nhắn: {message}")
             msg_data = json.loads(message)
             if msg_data['type'] == "HELLO":
                 print(f"Seeder nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
                 response = json.dumps({"type": "HELLO_ACK"})
-                print(f"Seeder gửi HELLO_ACK đến {self.peer_address[0]}:{self.peer_address[1]}")
+                print(f"Seeder chuẩn bị gửi HELLO_ACK đến {self.peer_address[0]}:{self.peer_address[1]}")
                 self.send_message(response)
+                print(f"Seeder đã gửi HELLO_ACK")
                 
             elif msg_data['type'] == "HELLO_ACK":
                 print(f"Leecher nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
@@ -82,8 +84,9 @@ class PeerConnection(threading.Thread):
                     "type": "REQUEST_PIECE",
                     "piece_index": 0
                 })
-                print(f"Leecher gửi yêu cầu piece 0 đến {self.peer_address[0]}:{self.peer_address[1]}")
+                print(f"Leecher chuẩn bị gửi yêu cầu piece 0 đến {self.peer_address[0]}:{self.peer_address[1]}")
                 self.send_message(request)
+                print("Leecher đã gửi yêu cầu piece 0")
                 
             elif msg_data['type'] == "REQUEST_PIECE":
                 piece_index = msg_data.get('piece_index')
@@ -117,9 +120,10 @@ class PeerConnection(threading.Thread):
 
         except json.JSONDecodeError as e:
             print(f"Lỗi khi giải mã JSON: {str(e)}")
-            print(f"Tin nhắn gốc: {message}")
+            print(f"Tin nhắn gốc gây lỗi: {message}")
         except Exception as e:
             print(f"Lỗi trong process_message: {str(e)}")
+            print(f"Tin nhắn gây lỗi: {message}")
 
     def request_next_piece(self, retry_piece=None):
         piece_index = retry_piece if retry_piece is not None else self.current_piece
@@ -136,9 +140,12 @@ class PeerConnection(threading.Thread):
 
     def send_message(self, message):
         try:
+            print(f"Đang cố gắng gửi tin nhắn: {message}")
             self.sock.sendall(message.encode('utf-8'))
+            print(f"Đã gửi tin nhắn thành công: {message}")
         except Exception as e:
             print(f"Lỗi khi gửi tin nhắn: {str(e)}")
+            print(f"Chi tiết tin nhắn bị lỗi: {message}")
 
     def request_piece(self, piece_index):
         message = json.dumps({"type": "REQUEST_PIECE", "piece_index": piece_index})
