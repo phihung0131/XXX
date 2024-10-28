@@ -39,6 +39,9 @@ class Node:
         os.makedirs(self.pieces_dir, exist_ok=True)
         self.current_magnet_link = None
         self.current_file_name = None  # Thêm dòng này
+        self.shared_files = {}  # Lưu mapping giữa magnet link và thông tin file
+        self.shared_files_path = os.path.join(self.node_data_dir, 'shared_files.json')
+        self.load_shared_files()  # Load thông tin shared files khi khởi động
 
     def stop(self):
         self.running = False
@@ -152,8 +155,22 @@ class Node:
             time.sleep(120)  # Đợi 2 phút
 
     def share_file(self, file_path, callback=None):
-        thread = threading.Thread(target=self._share_file_thread, args=(file_path, callback))
-        thread.start()
+        try:
+            # Lưu thông tin file đã chia sẻ
+            file_info = {
+                'file_path': file_path,
+                'file_name': os.path.basename(file_path),
+                'torrent_path': torrent_path,
+                'decoded_json_path': decoded_json_path,
+                'magnet_link': magnet_link
+            }
+            self.shared_files[magnet_link] = file_info
+            self.save_shared_files()
+            
+            return magnet_link, torrent_path
+        except Exception as e:
+            print(f"Lỗi khi chia sẻ file: {e}")
+            return None, None
 
     def _share_file_thread(self, file_path, callback):
         try:
@@ -449,17 +466,28 @@ class Node:
     def get_torrent_info(self, magnet_link):
         """Lấy thông tin torrent từ magnet link"""
         try:
-            # Tìm file decoded JSON tương ứng với magnet link
+            # Kiểm tra trong shared files trước
+            if magnet_link in self.shared_files:
+                file_info = self.shared_files[magnet_link]
+                decoded_json_path = file_info['decoded_json_path']
+                if os.path.exists(decoded_json_path):
+                    with open(decoded_json_path, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+            
+            # Nếu không tìm thấy trong shared files, tìm trong thư mục torrent
             for file_name in os.listdir(self.torrent_dir):
                 if file_name.endswith('_decoded.json'):
                     file_path = os.path.join(self.torrent_dir, file_name)
                     with open(file_path, 'r', encoding='utf-8') as f:
                         torrent_info = json.load(f)
                         return torrent_info
+                        
             print(f"Không tìm thấy thông tin torrent cho magnet link: {magnet_link}")
+            print(f"Danh sách shared files: {self.shared_files}")
             return None
         except Exception as e:
             print(f"Lỗi khi lấy thông tin torrent: {str(e)}")
+            print(traceback.format_exc())
             return None
 
     def get_piece_data(self, magnet_link, piece_index):
@@ -588,6 +616,25 @@ class Node:
                          if f.startswith('piece_'))
     
         return [i for i in range(total_pieces) if i not in existing_pieces]
+
+    def load_shared_files(self):
+        """Load thông tin shared files từ file JSON"""
+        try:
+            if os.path.exists(self.shared_files_path):
+                with open(self.shared_files_path, 'r') as f:
+                    self.shared_files = json.load(f)
+        except Exception as e:
+            print(f"Lỗi khi load shared files: {e}")
+            self.shared_files = {}
+
+    def save_shared_files(self):
+        """Lưu thông tin shared files vào file JSON"""
+        try:
+            with open(self.shared_files_path, 'w') as f:
+                json.dump(self.shared_files, f, indent=2)
+        except Exception as e:
+            print(f"Lỗi khi lưu shared files: {e}")
+
 
 
 
