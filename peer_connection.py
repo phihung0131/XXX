@@ -56,33 +56,50 @@ class PeerConnection(threading.Thread):
             self.cleanup()
 
     def listen_for_messages(self, sock):
+        print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Bắt đầu lắng nghe tin nhắn")
         while self.running:
             try:
+                print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Đang đợi tin nhắn...")
                 data = sock.recv(1024)
                 if not data:
-                    print("Kết nối đã đóng")
+                    print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Kết nối đã đóng")
                     self.running = False
                     break
 
                 message = data.decode('utf-8')
-                print(f"Nhận được tin nhắn: {message}")
+                print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Nhận được tin nhắn: {message}")
                 self.process_message(message)
 
+            except socket.error as e:
+                print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Lỗi socket khi lắng nghe: {e}")
+                print(traceback.format_exc())
+                self.running = False
+                break
             except Exception as e:
-                print(f"Lỗi khi lắng nghe tin nhắn: {e}")
+                print(f"{'Leecher' if self.is_initiator else 'Seeder'}: Lỗi không xác định: {e}")
+                print(traceback.format_exc())
                 self.running = False
                 break
 
     def send_message(self, message):
         try:
             if self.is_initiator:
-                self.sock.sendall(message.encode('utf-8'))
-                print(f"Leecher đã gửi: {message}")
+                print(f"Leecher chuẩn bị gửi: {message}")
+                if self.sock:
+                    self.sock.sendall(message.encode('utf-8'))
+                    print("Leecher đã gửi thành công")
+                else:
+                    print("Leecher ERROR: sock là None")
             else:
-                self.client_sock.sendall(message.encode('utf-8'))
-                print(f"Seeder đã gửi: {message}")
+                print(f"Seeder chuẩn bị gửi: {message}")
+                if self.client_sock:
+                    self.client_sock.sendall(message.encode('utf-8'))
+                    print("Seeder đã gửi thành công")
+                else:
+                    print("Seeder ERROR: client_sock là None")
         except Exception as e:
-            print(f"Lỗi khi gửi tin nhắn: {e}")
+            print(f"Lỗi khi gửi tin nhắn: {str(e)}")
+            print(traceback.format_exc())
 
     def process_message(self, message):
         try:
@@ -90,9 +107,19 @@ class PeerConnection(threading.Thread):
             
             if msg_data['type'] == "HELLO":
                 print(f"Seeder: Nhận HELLO từ {self.peer_address[0]}:{self.peer_address[1]}")
-                hello_ack = json.dumps({"type": "HELLO_ACK"})
-                print("Seeder: Đang gửi HELLO_ACK...")
-                self.send_message(hello_ack)
+                try:
+                    hello_ack = json.dumps({"type": "HELLO_ACK"})
+                    print("Seeder: Đã tạo tin nhắn HELLO_ACK")
+                    print(f"Seeder: Chuẩn bị gửi: {hello_ack}")
+                    if self.client_sock:
+                        print("Seeder: Sử dụng client_sock để gửi")
+                        self.client_sock.sendall(hello_ack.encode('utf-8'))
+                        print("Seeder: Đã gửi HELLO_ACK thành công")
+                    else:
+                        print("Seeder: ERROR - client_sock là None")
+                except Exception as e:
+                    print(f"Seeder: Lỗi khi gửi HELLO_ACK: {str(e)}")
+                    print(traceback.format_exc())
                 
             elif msg_data['type'] == "HELLO_ACK":
                 print(f"Leecher: Nhận HELLO_ACK từ {self.peer_address[0]}:{self.peer_address[1]}")
@@ -125,8 +152,11 @@ class PeerConnection(threading.Thread):
                 print(f"Leecher: Đang gửi yêu cầu piece {next_piece}...")
                 self.send_message(request)
 
+        except json.JSONDecodeError as e:
+            print(f"Lỗi giải mã JSON: {str(e)}")
+            print(f"Tin nhắn gốc: {message}")
         except Exception as e:
-            print(f"Lỗi xử lý tin nhắn: {e}")
+            print(f"Lỗi xử lý tin nhắn: {str(e)}")
             print(traceback.format_exc())
 
     def cleanup(self):
