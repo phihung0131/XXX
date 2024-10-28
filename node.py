@@ -35,6 +35,7 @@ class Node:
         os.makedirs(self.node_data_dir, exist_ok=True)
         os.makedirs(self.torrent_dir, exist_ok=True)
         os.makedirs(self.pieces_dir, exist_ok=True)
+        self.current_magnet_link = None  # Thêm dòng này
 
     def load_or_create_config(self):
         if os.path.exists(self.config_file):
@@ -324,7 +325,7 @@ class Node:
         return None
 
     def connect_and_request_piece(self, peer, piece_index):
-        self.current_magnet_link = self.current_downloading_magnet  # Lưu magnet link hiện tại
+        # Sử dụng magnet_link trực tiếp thay vì current_downloading_magnet
         peer_connection = PeerConnection(self, (peer['ip'], peer['port']))
         peer_connection.start()
         return peer_connection
@@ -486,6 +487,7 @@ class UserInterface:
     def run(self):
         # Chạy giao diện người dùng
         pass
+
 
 
 
