@@ -66,19 +66,26 @@ class NodeGUI:
                     self.node.current_file_name = peers_data['name']
                     self.node.current_magnet_link = magnet_link
                 
-                self.status_label.config(text=f"Đã lấy danh sách peer. Số lượng piece: {len(peers_data)}")
-                peers_data_file = os.path.join(self.node.node_data_dir, 'peers_data.json')
-                with open(peers_data_file, 'w') as f:
-                    json.dump(peers_data, f, indent=2)
-                print(f"Đã lưu thông tin peers vào {peers_data_file}")
-                
-                # Kết nối với node đầu tiên có piece 1
-                first_peer = self.node.find_peer_with_piece(peers_data, 0)
-                if first_peer:
-                    self.node.connect_and_request_piece(first_peer, 0)
-                    messagebox.showinfo("Thông báo", f"Đã kết nối với peer {first_peer['ip']}:{first_peer['port']} và yêu cầu piece 1")
+                    # Lấy số lượng pieces từ cấu trúc đúng
+                    num_pieces = len(peers_data.get('pieces', []))
+                    self.status_label.config(text=f"Đã lấy danh sách peer. Số lượng piece: {num_pieces}")
+                    
+                    # Lưu thông tin peers
+                    peers_data_file = os.path.join(self.node.node_data_dir, 'peers_data.json')
+                    with open(peers_data_file, 'w') as f:
+                        json.dump(peers_data, f, indent=2)
+                    print(f"Đã lưu thông tin peers vào {peers_data_file}")
+                    
+                    # Kết nối với peer đầu tiên có piece 0
+                    first_peer = self.node.find_peer_with_piece(peers_data, 0)
+                    if first_peer:
+                        self.node.connect_and_request_piece(first_peer, 0)
+                        messagebox.showinfo("Thông báo", 
+                            f"Đã kết nối với peer {first_peer['ip']}:{first_peer['port']} và yêu cầu piece 0")
+                    else:
+                        messagebox.showinfo("Thông báo", "Không tìm thấy peer có piece 0")
                 else:
-                    messagebox.showinfo("Thông báo", "Không tìm thấy peer có piece 1")
+                    messagebox.showerror("Lỗi", "Dữ liệu peers không hợp lệ")
             else:
                 error_message = "Không thể lấy danh sách peer. Vui lòng kiểm tra kết nối và magnet link."
                 messagebox.showerror("Lỗi", error_message)

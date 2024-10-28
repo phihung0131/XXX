@@ -54,7 +54,7 @@ class Node:
             self.ip = self.get_ip()
             self.port = 52229
         
-        # Lưu cấu hình
+        # Lưu cấu h��nh
         with open(self.config_file, 'w') as f:
             json.dump({'ip': self.ip, 'port': self.port}, f)
 
@@ -327,10 +327,14 @@ class Node:
         listener.start()
 
     def find_peer_with_piece(self, peers_data, piece_index):
-        for piece_data in peers_data:
-            if piece_data['piece_index'] == piece_index:
-                for node in piece_data['nodes']:
-                    return node  # Trả về node đầu tiên có piece này
+        """Tìm peer có piece cần thiết"""
+        if isinstance(peers_data, dict) and 'pieces' in peers_data:
+            pieces = peers_data['pieces']
+            for piece in pieces:
+                if isinstance(piece, dict) and piece.get('piece_index') == piece_index:
+                    nodes = piece.get('nodes', [])
+                    if nodes:
+                        return nodes[0]
         return None
 
     def connect_and_request_piece(self, peer, piece_index):
@@ -486,4 +490,5 @@ class Node:
                              if f.startswith('piece_'))
         
         return [i for i in range(total_pieces) if i not in existing_pieces]
+
 
