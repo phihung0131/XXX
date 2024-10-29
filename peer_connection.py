@@ -91,7 +91,14 @@ class PeerConnection(threading.Thread):
             # Thêm ký tự kết thúc vào tin nhắn
             message = json.dumps(message_dict) + self.MESSAGE_END
             role = "Leecher" if self.is_initiator else "Seeder"
-            print(f"{role}: Đang gửi tin nhắn: {message.strip()}")
+            
+            # Tạo bản sao của message_dict để in log
+            log_message = message_dict.copy()
+            if 'data' in log_message:
+                log_message['data'] = '<binary data>'
+                
+            print(f"{role}: Đang gửi tin nhắn: {json.dumps(log_message)}")
+            
             self.sock.sendall(message.encode('utf-8'))
             print(f"{role}: Đã gửi tin nhắn thành công")
         except Exception as e:
@@ -108,13 +115,11 @@ class PeerConnection(threading.Thread):
             try:
                 if self.sock is None:
                     print(f"{role}: Socket is None, exiting receive loop")
-                    
                     break
 
                 data = self.sock.recv(4096)
                 if not data:
                     print(f"{role}: Kết nối đã đóng (không có dữ liệu)")
-                    
                     break
 
                 # Thêm dữ liệu mới vào buffer
@@ -124,16 +129,20 @@ class PeerConnection(threading.Thread):
                 while self.MESSAGE_END in self.buffer:
                     message, self.buffer = self.buffer.split(self.MESSAGE_END, 1)
                     if message:
-                        print(f"{role}: Nhận được tin nhắn: {message}")
-                        self.handle_message(json.loads(message))
-                # Xử lý từng tin nhắn trong buffer
+                        # Tạo bản sao của message để in log
+                        message_dict = json.loads(message)
+                        log_message = message_dict.copy()
+                        if 'data' in log_message:
+                            log_message['data'] = '<binary data>'
+                        print(f"{role}: Nhận được tin nhắn: {json.dumps(log_message)}")
+                        self.handle_message(message_dict)
+                        
             except Exception as e:
                 print(f"{role}: Lỗi nhận tin nhắn: {e}")
                 print(traceback.format_exc())
-                
                 break
 
-        print(f"{role}: Thread lắng nghe kết thúc")
+    print(f"{role}: Thread lắng nghe kết thúc")
 
     def handle_message(self, message_dict):
         try:
