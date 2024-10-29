@@ -33,9 +33,6 @@ class NodeGUI:
         self.analyze_button = tk.Button(master, text="Phân tích Torrent", command=self.analyze_torrent)
         self.analyze_button.pack()
 
-        self.stats_button = tk.Button(master, text="Xem thống kê", command=self.show_statistics)
-        self.stats_button.pack()
-
         # Khởi chạy node trong một thread riêng biệt
         self.node_thread = threading.Thread(target=self.node.run)
         self.node_thread.daemon = True
@@ -108,29 +105,6 @@ class NodeGUI:
             self.node.stop()  # Dừng node và các thread con
             self.master.destroy()  # Đóng cửa sổ
             os._exit(0)  # Kết thúc toàn bộ chương trình
-
-    def show_statistics(self):
-        if hasattr(self.node.download_manager, 'download_stats'):
-            stats_window = tk.Toplevel(self.master)
-            stats_window.title("Thống kê tải file")
-            
-            for magnet_link, stats in self.node.download_manager.download_stats.items():
-                # Hiển thị thông tin cơ bản
-                tk.Label(stats_window, text=f"File: {self.node.get_file_name(magnet_link)}").pack()
-                tk.Label(stats_window, text=f"Thời gian tải: {stats['duration']:.2f} giây").pack()
-                
-                # Hiển thị thông tin chi tiết về pieces
-                piece_stats = stats['piece_statistics']
-                pieces_text = tk.Text(stats_window, height=10, width=50)
-                pieces_text.pack()
-                
-                for piece_index, peer_info in piece_stats['piece_sources'].items():
-                    pieces_text.insert(tk.END, 
-                        f"Piece {piece_index}: Tải từ {peer_info['ip']}:{peer_info['port']}\n")
-                
-                pieces_text.config(state=tk.DISABLED)
-        else:
-            messagebox.showinfo("Thông báo", "Chưa có thống kê tải file nào")
 
 def main():
     root = tk.Tk()

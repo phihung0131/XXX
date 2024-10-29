@@ -382,10 +382,22 @@ class Node:
         return None
 
     def connect_and_request_piece(self, peer, piece_index):
-        # Sử dụng magnet_link trực tiếp thay vì current_downloading_magnet
-        peer_connection = PeerConnection(self, (peer['ip'], peer['port']))
-        peer_connection.start()
-        return peer_connection
+        try:
+            peer_conn = PeerConnection(self, (peer['ip'], peer['port']))
+            peer_conn.start()
+            
+            # Gửi yêu cầu piece
+            peer_conn.queue_message({
+                "type": "REQUEST_PIECE",
+                "piece_index": piece_index,
+                "magnet_link": self.current_magnet_link
+            })
+            
+            return peer_conn
+        except Exception as e:
+            print(f"Lỗi khi kết nối đến peer {peer['ip']}:{peer['port']}: {e}")
+            return None
+
     def process_magnet_response(self, response_data):
         if isinstance(response_data, dict):
             if 'torrentFile' in response_data and 'torrentFileSize' in response_data:
@@ -604,41 +616,19 @@ class Node:
 
     def handle_received_piece(self, piece_index, piece_data):
         """Xử lý piece nhận được từ peer"""
-        # Lấy hash piece từ torrent
         piece_hash = self.get_piece_hash(piece_index)
-            
-        # Tính hash của piece nhận được
         received_hash = hashlib.sha1(piece_data).hexdigest()
         
         if piece_hash == received_hash:
-            print(f"Piece {piece_index} hợp lệ, lưu trữ")
             self.save_piece(piece_index, piece_data)
+            self.download_manager.piece_completed(self.current_magnet_link, piece_index)
             
-            # Kiểm tra nếu đã nhận đủ piece
+            # Kiểm tra nếu đã tải xong
             if self.check_download_complete():
-                print("Đã nhận đủ các piece, bắt đầu ghép file")
-                self.combine_pieces()
+                self.finish_download()
         else:
-            print(f"Piece {piece_index} không hợp lệ, yêu cầu lại")
-            # Gửi lại yêu cầu piece này
-            self.request_piece(piece_index)
-            return []
-        # Thông báo piece cho tracker
-        try:
-            tracker_piece_url = f"{tracker_host}/api/pieces"
-            piece_data = {
-                "magnet_text": self.current_magnet_link,
-                "piece_index": str(piece_index),
-                "ip": self.ip,
-                "port": str(self.port)
-            }
-            response = requests.put(tracker_piece_url, json=piece_data)
-            if response.status_code != 200:
-                print(f"Lỗi khi thông báo piece cho tracker: {response.status_code}")
-                print(f"Nội dung phản hồi: {response.text}")
-        except Exception as e:
-            print(f"Lỗi khi gửi thông báo piece lên tracker: {e}")
-
+            print(f"Piece {piece_index} không hợp lệ")
+            self.download_manager.piece_failed(self.current_magnet_link, piece_index)
 
     def check_download_complete(self):
         """Kiểm tra xem đã tải đủ các piece chưa"""
