@@ -142,7 +142,7 @@ class PeerConnection(threading.Thread):
                 print(traceback.format_exc())
                 break
 
-    print(f"{role}: Thread lắng nghe kết thúc")
+        print(f"{role}: Thread lắng nghe kết thúc")
 
     def handle_message(self, message_dict):
         try:
