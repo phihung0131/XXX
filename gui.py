@@ -10,6 +10,7 @@ class NodeGUI:
         self.master = master
         self.node = Node()
         master.title("P2P File Sharing")
+        master.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Frame chính
         main_frame = ttk.Frame(master, padding="10")
@@ -184,6 +185,7 @@ class NodeGUI:
                 return f"{size:.1f} {unit}"
             size /= 1024
         return f"{size:.1f} TB"
+
 
 def main():
     root = tk.Tk()
