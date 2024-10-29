@@ -2,6 +2,7 @@ import threading
 import os
 import hashlib
 import time
+from peer_selector import PeerSelector
 
 class DownloadManager(threading.Thread):
     def __init__(self, node):
@@ -29,8 +30,8 @@ class DownloadManager(threading.Thread):
                 'peers_data': peers_data,
                 'active_pieces': set(),
                 'completed_pieces': set(),
-                'piece_sources': {},  # {piece_index: peer_info}
-                'connections': set(),  # Tập hợp các kết nối đang hoạt động
+                'piece_sources': {},
+                'connections': set(),
                 'start_time': time.time()
             }
             self.downloads[magnet_link] = download_info

@@ -1,3 +1,5 @@
+import time
+
 class PeerSelector:
     def __init__(self):
         self.peer_stats = {}  # {peer_id: {speed: float, success_rate: float}}
@@ -5,7 +7,6 @@ class PeerSelector:
         self.max_connections_per_peer = 3
 
     def select_best_peers_for_pieces(self, pieces_info, num_pieces=5):
-        """Chọn peer tốt nhất cho mỗi piece dựa trên các tiêu chí"""
         selected_pairs = []
         
         for piece in pieces_info:
@@ -39,32 +40,26 @@ class PeerSelector:
         return selected_pairs
 
     def calculate_peer_score(self, peer_id):
-        """Tính điểm cho peer dựa trên hiệu suất"""
         stats = self.peer_stats.get(peer_id, {})
         speed = stats.get('speed', 1.0)
         success_rate = stats.get('success_rate', 1.0)
         active_connections = self.active_connections.get(peer_id, 0)
         
-        # Công thức tính điểm
         score = (speed * 0.4 + success_rate * 0.6) / (active_connections + 1)
         return score
 
     def can_add_connection(self, peer_id):
-        """Kiểm tra xem có thể thêm kết nối mới đến peer không"""
         current_connections = self.active_connections.get(peer_id, 0)
         return current_connections < self.max_connections_per_peer
 
     def add_connection(self, peer_id):
-        """Thêm một kết nối mới"""
         self.active_connections[peer_id] = self.active_connections.get(peer_id, 0) + 1
 
     def remove_connection(self, peer_id):
-        """Xóa một kết nối"""
         if peer_id in self.active_connections:
             self.active_connections[peer_id] = max(0, self.active_connections[peer_id] - 1)
 
     def update_peer_stats(self, peer_id, download_speed, success):
-        """Cập nhật thống kê của peer"""
         if peer_id not in self.peer_stats:
             self.peer_stats[peer_id] = {'speed': 0, 'success_rate': 1.0, 'total_attempts': 0}
             
@@ -73,5 +68,8 @@ class PeerSelector:
         stats['total_attempts'] = stats['total_attempts'] + 1
         
         if success:
+            success_rate = stats.get('success_rate', 1.0)
+            stats['success_rate'] = (success_rate * (stats['total_attempts'] - 1) + 1) / stats['total_attempts']
+        else:
             success_rate = stats.get('success_rate', 1.0)
             stats['success_rate'] = (success_rate * (stats['total_attempts'] - 1)) / stats['total_attempts']
