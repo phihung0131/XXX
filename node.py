@@ -389,6 +389,11 @@ class Node:
             peer_conn = PeerConnection(self, (peer['ip'], peer['port']))
             peer_conn.start()
             
+            # Thêm vào danh sách peer_connections
+            if not hasattr(self, 'peer_connections'):
+                self.peer_connections = []
+            self.peer_connections.append(peer_conn)
+            
             # Gửi yêu cầu piece
             peer_conn.queue_message({
                 "type": "REQUEST_PIECE",
