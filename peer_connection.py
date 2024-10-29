@@ -5,17 +5,18 @@ import traceback
 import base64
 
 class PeerConnection(threading.Thread):
-    def __init__(self, node, peer_address, is_initiator=True):
+    def __init__(self, node, peer_address, assigned_pieces=None, is_initiator=True):
         threading.Thread.__init__(self)
         self.node = node
         self.peer_address = peer_address
         self.is_initiator = is_initiator
+        self.assigned_pieces = assigned_pieces or []  # Danh sách các piece được gán
         self.sock = None
         self.running = True
         self.message_queue = []
         self.queue_lock = threading.Lock()
-        self.buffer = ""  # Buffer để lưu dữ liệu chưa xử lý
-        self.MESSAGE_END = "\n"  # Ký tự kết thúc tin nhắn
+        self.buffer = ""
+        self.MESSAGE_END = "\n"
 
     def run(self):
         try:
@@ -174,14 +175,14 @@ class PeerConnection(threading.Thread):
             print(traceback.format_exc())
 
     def request_pieces(self):
-        """Yêu cầu các piece còn thiếu"""
-        needed_pieces = self.node.get_needed_pieces()
-        for piece_index in needed_pieces:
-            self.queue_message({
-                "type": "REQUEST_PIECE",
-                "piece_index": piece_index,
-                "magnet_link": self.node.current_magnet_link
-            })
+        """Chỉ yêu cầu các piece được gán cho connection này"""
+        for piece_index in self.assigned_pieces:
+            if piece_index in self.node.get_needed_pieces():
+                self.queue_message({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": piece_index,
+                    "magnet_link": self.node.current_magnet_link
+                })
 
     def cleanup(self):
         """Dọn dẹp và đóng kết nối"""

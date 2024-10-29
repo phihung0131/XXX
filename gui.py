@@ -60,37 +60,18 @@ class NodeGUI:
         magnet_link = simpledialog.askstring("Tải file", "Nhập magnet link:")
         if magnet_link:
             peers_data = self.node.get_peers_for_file(magnet_link)
-            print(f"Peers data nhận được: {peers_data}")
             if peers_data:
-                # Lấy tên file từ peers_data
                 if isinstance(peers_data, dict) and 'name' in peers_data:
                     self.node.current_file_name = peers_data['name']
                     self.node.current_magnet_link = magnet_link
-                
-                    # Lấy số lượng pieces từ cấu trúc đúng
+                    
+                    # Bắt đầu tải từ nhiều nguồn
+                    self.node.connect_and_request_pieces(peers_data)
+                    
                     num_pieces = len(peers_data.get('pieces', []))
-                    self.status_label.config(text=f"Đã lấy danh sách peer. Số lượng piece: {num_pieces}")
-                    
-                    # Lưu thông tin peers
-                    peers_data_file = os.path.join(self.node.node_data_dir, 'peers_data.json')
-                    with open(peers_data_file, 'w') as f:
-                        json.dump(peers_data, f, indent=2)
-                    print(f"Đã lưu thông tin peers vào {peers_data_file}")
-                    
-                    # Kết nối với peer đầu tiên có piece 0
-                    first_peer = self.node.find_peer_with_piece(peers_data, 0)
-                    if first_peer:
-                        self.node.connect_and_request_piece(first_peer, 0)
-                        messagebox.showinfo("Thông báo", 
-                            f"Đã kết nối với peer {first_peer['ip']}:{first_peer['port']} và yêu cầu piece 0")
-                    else:
-                        messagebox.showinfo("Thông báo", "Không tìm thấy peer có piece 0")
+                    self.status_label.config(text=f"Đang tải {num_pieces} pieces từ nhiều nguồn...")
                 else:
                     messagebox.showerror("Lỗi", "Dữ liệu peers không hợp lệ")
-            else:
-                error_message = "Không thể lấy danh sách peer. Vui lòng kiểm tra kết nối và magnet link."
-                messagebox.showerror("Lỗi", error_message)
-                print(error_message)
 
     def analyze_torrent(self):
         torrent_file_name = filedialog.askopenfilename(initialdir=self.node.torrent_dir, filetypes=[("Torrent files", "*.torrent")])

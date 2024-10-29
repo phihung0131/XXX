@@ -384,27 +384,57 @@ class Node:
             print(f"Chi tiết lỗi: {traceback.format_exc()}")
         return None
 
-    def connect_and_request_piece(self, peer, piece_index):
-        try:
-            peer_conn = PeerConnection(self, (peer['ip'], peer['port']))
-            peer_conn.start()
-            
-            # Thêm vào danh sách peer_connections
-            if not hasattr(self, 'peer_connections'):
-                self.peer_connections = []
+    def connect_and_request_pieces(self, peers_data):
+        """Tạo nhiều kết nối và phân phối pieces"""
+        needed_pieces = self.get_needed_pieces()
+        if not needed_pieces:
+            return
+
+        # Tạo mapping piece -> nodes có sẵn
+        piece_to_nodes = {}
+        for piece in peers_data['pieces']:
+            piece_index = piece['piece_index']
+            if piece_index in needed_pieces:
+                piece_to_nodes[piece_index] = piece['nodes']
+
+        # Chọn tối đa 3 node khác nhau
+        selected_nodes = set()
+        piece_assignments = {}  # {node_address: [piece_indexes]}
+        
+        for piece_index in needed_pieces:
+            if len(selected_nodes) >= 3:  # Giới hạn 3 kết nối
+                break
+                
+            available_nodes = piece_to_nodes.get(piece_index, [])
+            for node in available_nodes:
+                node_addr = (node['ip'], node['port'])
+                if node_addr not in selected_nodes:
+                    selected_nodes.add(node_addr)
+                    piece_assignments[node_addr] = []
+                    break
+
+        # Phân phối pieces cho các node đã chọn
+        current_node_index = 0
+        selected_node_list = list(selected_nodes)
+        
+        for piece_index in needed_pieces:
+            if not selected_node_list:
+                break
+                
+            node_addr = selected_node_list[current_node_index]
+            piece_assignments[node_addr].append(piece_index)
+            current_node_index = (current_node_index + 1) % len(selected_node_list)
+
+        # Tạo và khởi động các connection
+        for node_addr, assigned_pieces in piece_assignments.items():
+            peer_conn = PeerConnection(
+                self,
+                node_addr,
+                assigned_pieces=assigned_pieces,
+                is_initiator=True
+            )
             self.peer_connections.append(peer_conn)
-            
-            # Gửi yêu cầu piece
-            peer_conn.queue_message({
-                "type": "REQUEST_PIECE",
-                "piece_index": piece_index,
-                "magnet_link": self.current_magnet_link
-            })
-            
-            return peer_conn
-        except Exception as e:
-            print(f"Lỗi khi kết nối đến peer {peer['ip']}:{peer['port']}: {e}")
-            return None
+            peer_conn.start()
 
     def process_magnet_response(self, response_data):
         if isinstance(response_data, dict):
