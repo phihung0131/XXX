@@ -583,9 +583,9 @@ class Node:
             print(f"Lỗi khi thông báo pieces cho tracker: {e}")
 
     def combine_pieces(self):
+        """Ghép các piece thành file hoàn chỉnh"""
         piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
-        output_path = os.path.join(self.node_data_dir, "downloads", self.current_file_name)
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        output_path = os.path.join(self.downloads_dir, self.current_file_name)
         
         with open(output_path, 'wb') as outfile:
             piece_index = 0
@@ -593,9 +593,11 @@ class Node:
                 piece_path = os.path.join(piece_dir, f"piece_{piece_index}")
                 if not os.path.exists(piece_path):
                     break
+                
                 with open(piece_path, 'rb') as piece_file:
                     outfile.write(piece_file.read())
                 piece_index += 1
+            
         print(f"Đã ghép file thành công: {output_path}")
         
         # Lưu thông tin vào shared_files
@@ -676,6 +678,42 @@ class Node:
                 json.dump(self.shared_files, f, indent=2)
         except Exception as e:
             print(f"Lỗi khi lưu shared files: {e}")
+
+    def finish_download(self):
+        """Xử lý khi tải file hoàn tất"""
+        try:
+            # Ghép các piece thành file hoàn chỉnh
+            self.combine_pieces()
+            
+            # Ngắt kết nối với tất cả peer
+            for peer_conn in self.peer_connections:
+                peer_conn.cleanup()
+                
+            # In thống kê
+            self.print_download_statistics()
+            
+            print(f"Đã tải xong file: {self.current_file_name}")
+            
+            # Cập nhật trạng thái
+            self.current_file_name = None
+            self.current_magnet_link = None
+            self.peer_connections = []
+            
+        except Exception as e:
+            print(f"Lỗi khi hoàn thành tải file: {e}")
+
+    def print_download_statistics(self):
+        """In thống kê về quá trình tải"""
+        if self.current_magnet_link:
+            stats = self.download_manager.get_download_stats(self.current_magnet_link)
+            if stats:
+                print("\n=== Thống kê tải file ===")
+                print(f"Tên file: {self.current_file_name}")
+                print(f"Thời gian tải: {stats['duration']:.2f} giây")
+                print(f"Tổng số piece: {stats['total_pieces']}")
+                print("\nThông tin các piece:")
+                for piece_index, peer_info in stats['piece_sources'].items():
+                    print(f"Piece {piece_index}: Tải từ {peer_info['ip']}:{peer_info['port']}")
 
 
 
