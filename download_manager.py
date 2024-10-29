@@ -86,7 +86,15 @@ class DownloadManager(threading.Thread):
             self.combine_pieces(magnet_link, download_info)
             print(f"Đã tải xong file: {download_info['file_name']}")
             
-            # Ngắt kết nối với tất cả peer
+            # Ngắt tất cả các kết nối đang hoạt động cho download này
+            for conn in download_info['connections']:
+                try:
+                    conn.cleanup()
+                except Exception as e:
+                    print(f"Lỗi khi ngắt kết nối: {e}")
+            download_info['connections'].clear()
+            
+            # Ngắt kết nối với tất cả peer từ node
             self.node.disconnect_all_peers()
             
             # In thống kê

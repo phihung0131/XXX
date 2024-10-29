@@ -754,13 +754,19 @@ class Node:
                     print(f"Piece {piece_index}: Tải từ {peer_info['ip']}:{peer_info['port']}")
 
     def disconnect_all_peers(self):
-        """Ngắt kết nối với tất cả các peer"""
-        for peer_conn in list(self.peer_connections):  # Tạo bản sao để tránh lỗi khi xóa
+        """Ngắt tất cả các kết nối peer"""
+        print("Đang ngắt kết nối với tất cả các peer...")
+        # Tạo bản sao để tránh lỗi khi xóa trong vòng lặp
+        for peer_conn in list(self.peer_connections):
             try:
                 peer_conn.cleanup()
+                peer_conn.join(timeout=1)  # Chờ thread kết thúc với timeout
                 self.peer_connections.remove(peer_conn)
             except Exception as e:
                 print(f"Lỗi khi ngắt kết nối peer: {e}")
+        
+        self.peer_connections.clear()  # Đảm bảo danh sách trống
+        print("Đã ngắt kết nối với tất cả các peer")
 
 
 
