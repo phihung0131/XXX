@@ -2,10 +2,9 @@ import tkinter as tk
 from tkinter import ttk, filedialog, simpledialog, messagebox
 from node import Node
 import threading
-import os  # Thêm dòng này
-import json
-import sys  # thêm dòng này
-import io   # thêm dòng này
+import os 
+import sys  
+import io   
 
 class NodeGUI:
     def __init__(self, master):
@@ -134,13 +133,6 @@ class NodeGUI:
                     self.status_label.config(text=f"Đang tải {num_pieces} pieces từ nhiều nguồn...")
                 else:
                     messagebox.showerror("Lỗi", "Dữ liệu peers không hợp lệ")
-
-    def analyze_torrent(self):
-        torrent_file_name = filedialog.askopenfilename(initialdir=self.node.torrent_dir, filetypes=[("Torrent files", "*.torrent")])
-        if torrent_file_name:
-            temp_dir, piece_hashes = self.node.analyze_torrent(os.path.basename(torrent_file_name))
-            if temp_dir and piece_hashes:
-                messagebox.showinfo("Phân tích Torrent", f"Kết quả phân tích đã được lưu trong thư mục: {temp_dir}")
 
     def on_closing(self):
         if messagebox.askokcancel("Thoát", "Bạn có muốn thoát không?"):
