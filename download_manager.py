@@ -12,32 +12,13 @@ class DownloadManager(threading.Thread):
         while self.node.running:  # Thay vì while True
             # Kiểm tra các file đang tải
             for magnet_link, download_info in list(self.downloads.items()):
-                if self.is_download_complete(download_info):
+                if all(download_info['pieces']):
                     self.finish_download(magnet_link, download_info)
                 else:
                     self.request_next_piece(magnet_link, download_info)
             
             # Đợi một khoảng thời gian trước khi kiểm tra lại
             threading.Event().wait(5)
-
-    def request_multiple_pieces(self, magnet_link):
-        download_info = self.downloads[magnet_link]
-        pieces_info = download_info['peers_data']['pieces']
-        
-        # Chọn các cặp piece-peer tốt nhất
-        selected_pairs = self.peer_selector.select_best_peers_for_pieces(pieces_info)
-        
-        for piece_index, peer in selected_pairs:
-            if piece_index not in download_info['active_pieces']:
-                # Tạo kết nối mới và yêu cầu piece
-                peer_conn = self.node.connect_and_request_piece(peer, piece_index)
-                if peer_conn:
-                    download_info['connections'].add(peer_conn)
-                    download_info['active_pieces'].add(piece_index)
-                    download_info['piece_sources'][piece_index] = peer
-
-    def is_download_complete(self, download_info):
-        return all(download_info['pieces'])
 
     def finish_download(self, magnet_link, download_info):
         """Hoàn thành quá trình tải"""
@@ -63,7 +44,7 @@ class DownloadManager(threading.Thread):
             # Xóa thông tin download
             if magnet_link in self.downloads:
                 del self.downloads[magnet_link]
-                if self.is_download_complete(download_info):
+                if all(download_info['pieces']):
                     # Khởi động lại trạng thái lắng nghee
                     self.node.start_listening()
                 # Yêu cầu lại piece không hợp lệ
@@ -91,5 +72,17 @@ class DownloadManager(threading.Thread):
                 self.finish_download(magnet_link, download_info)
             else:
                 # Tiếp tục tải các piece khác
-                self.request_multiple_pieces(magnet_link)
-
+                download_info = self.downloads[magnet_link]
+                pieces_info = download_info['peers_data']['pieces']
+                
+                # Chọn các cặp piece-peer tốt nhất
+                selected_pairs = self.peer_selector.select_best_peers_for_pieces(pieces_info)
+                
+                for piece_index, peer in selected_pairs:
+                    if piece_index not in download_info['active_pieces']:
+                        # Tạo kết nối mới và yêu cầu piece
+                        peer_conn = self.node.connect_and_request_piece(peer, piece_index)
+                        if peer_conn:
+                            download_info['connections'].add(peer_conn)
+                            download_info['active_pieces'].add(piece_index)
+                            download_info['piece_sources'][piece_index] = peer

@@ -18,7 +18,13 @@ class PeerSelector:
             peer_scores = []
             for peer in available_nodes:
                 peer_id = f"{peer['ip']}:{peer['port']}"
-                score = self.calculate_peer_score(peer_id)
+
+                stats = self.peer_stats.get(peer_id, {})
+                speed = stats.get('speed', 1.0)
+                success_rate = stats.get('success_rate', 1.0)
+                active_connections = self.active_connections.get(peer_id, 0)
+                score = (speed * 0.4 + success_rate * 0.6) / (active_connections + 1)
+
                 peer_scores.append((peer, score))
             
             # Sắp xếp theo điểm số
@@ -36,15 +42,6 @@ class PeerSelector:
                 break
                 
         return selected_pairs
-
-    def calculate_peer_score(self, peer_id):
-        stats = self.peer_stats.get(peer_id, {})
-        speed = stats.get('speed', 1.0)
-        success_rate = stats.get('success_rate', 1.0)
-        active_connections = self.active_connections.get(peer_id, 0)
-        
-        score = (speed * 0.4 + success_rate * 0.6) / (active_connections + 1)
-        return score
 
     def can_add_connection(self, peer_id):
         current_connections = self.active_connections.get(peer_id, 0)

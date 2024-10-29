@@ -68,12 +68,12 @@ class Node:
             # Nếu không thể kết nối, trả về địa chỉ loopback
             return "127.0.0.1"
 
-    def connect_to_peers(self):
-        for peer_data in self.peers:
-            peer_ip = peer_data['ip']
-            peer_port = peer_data['port']
-            print(f"Đang kết nối với peer: {peer_ip}:{peer_port}")
-            PeerConnection(self, (peer_ip, peer_port)).start()
+    # def connect_to_peers(self):
+    #     for peer_data in self.peers:
+    #         peer_ip = peer_data['ip']
+    #         peer_port = peer_data['port']
+    #         print(f"Đang kết nối với peer: {peer_ip}:{peer_port}")
+    #         PeerConnection(self, (peer_ip, peer_port)).start()
 
     def run(self):
         print("======================VVVVVVVVV=========================")
@@ -89,7 +89,7 @@ class Node:
         announce_thread.start()
 
         # Các chức năng khác của node
-        self.connect_to_peers()
+        # self.connect_to_peers()
         self.download_manager.start()
 
     def announce_to_tracker(self):
