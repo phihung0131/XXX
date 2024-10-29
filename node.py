@@ -593,7 +593,7 @@ class Node:
             except Exception as e:
                 print(f"Lỗi khi ngắt kết nối peer: {e}")
         
-        self.peer_connections.clear()  # Đảm bảo danh sách trống
+        self.peer_connections.clear()  # Đảm bảo danh sách trốngg
         print("Đã ngắt kết nối với tất cả các peer")
 
 
