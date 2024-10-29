@@ -11,7 +11,6 @@ import math
 import tempfile
 from peer_connection import PeerConnection
 from download_manager import DownloadManager
-from upload_manager import UploadManager
 from config import tracker_host
 import base64
 
@@ -29,7 +28,6 @@ class Node:
         self.tracker_url = f"{tracker_host}/api/nodes"
         self.file_share_url = f"{tracker_host}/api/files"
         self.download_manager = DownloadManager(self)
-        self.upload_manager = UploadManager(self)
         self.piece_length = 512 * 1024  # 512KB
         self.node_data_dir = "node_data"
         self.torrent_dir = os.path.join(self.node_data_dir, "torrents")
@@ -73,30 +71,6 @@ class Node:
             # Nếu không thể kết nối, trả về địa chỉ loopback
             return "127.0.0.1"
 
-    def get_available_port(self):
-        # Luôn trả về port 52229
-        return 52229
-
-    def parse_magnet(self, magnet_text):
-        # Xử lý magnet text
-        pass
-
-    def parse_metainfo(self, metainfo_file):
-        # Đọc và phân tích metainfo file
-        pass
-
-    def connect_to_tracker(self):
-        # Kết nối với tracker
-        pass
-
-    def announce_files(self):
-        # Thông báo files cho tracker
-        pass
-
-    def request_file(self, file_hash):
-        # Yêu cầu file từ tracker
-        pass
-
     def connect_to_peers(self):
         for peer_data in self.peers:
             peer_ip = peer_data['ip']
@@ -128,7 +102,6 @@ class Node:
         # Các chức năng khác của node
         self.connect_to_peers()
         self.download_manager.start()
-        self.upload_manager.start()
 
     def announce_to_tracker(self):
         data = {
