@@ -81,7 +81,7 @@ class PeerConnection(threading.Thread):
                 print(traceback.format_exc())
                 self.running = False
                 break
-
+                
         print(f"{role}: Thread gửi tin nhắn kết thúc")
 
     def send_message(self, message_dict):
@@ -120,7 +120,7 @@ class PeerConnection(threading.Thread):
                     if message:
                         print(f"{role}: Nhận được tin nhắn: {message}")
                         self.handle_message(json.loads(message))
-
+                # Xử lý từng tin nhắn trong buffer
             except Exception as e:
                 print(f"{role}: Lỗi nhận tin nhắn: {e}")
                 print(traceback.format_exc())
