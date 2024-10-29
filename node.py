@@ -2,13 +2,11 @@ import threading
 import socket
 import bencodepy
 import hashlib
-import random
 import time
 import requests
 import os
 import json
 import math
-import tempfile
 from peer_connection import PeerConnection
 from download_manager import DownloadManager
 from config import tracker_host
@@ -21,10 +19,6 @@ class Node:
         self.config_file = 'node_config.json'
         self.load_or_create_config()
         self.peers = []
-        self.files = {}
-        self.pieces = {}
-        self.downloading = {}
-        self.uploading = {}
         self.tracker_url = f"{tracker_host}/api/nodes"
         self.file_share_url = f"{tracker_host}/api/files"
         self.download_manager = DownloadManager(self)
@@ -81,14 +75,6 @@ class Node:
             print(f"Đang kết nối với peer: {peer_ip}:{peer_port}")
             PeerConnection(self, (peer_ip, peer_port)).start()
 
-    def download_piece(self, piece_index, peer):
-        # Tải một piece từ peer
-        pass
-
-    def upload_piece(self, piece_index, peer):
-        # Upload một piece cho peer
-        pass
-
     def run(self):
         print("======================VVVVVVVVV=========================")
         print(f"Node đang chạy trên IP: {self.ip}, Port: {self.port}")
@@ -112,11 +98,8 @@ class Node:
             "port": self.port
         }
         try:
-            # print(f"Đang kết nối đến tracker: {self.tracker_url}")
             response = requests.post(self.tracker_url, json=data, timeout=10)
-            # print(f"Phản hồi từ tracker: Status code {response.status_code}")
             if response.status_code == 200:
-                # print("Đã thông báo thành công đến tracker")
                 return response.json()
             else:
                 print(f"Lỗi khi thông báo đến tracker: {response.status_code}")
@@ -230,20 +213,6 @@ class Node:
             if callback:
                 callback(0, 0, None, None)
 
-    def print_torrent_content(self, torrent_path):
-        with open(torrent_path, 'rb') as f:
-            torrent_data = bencodepy.decode(f.read())
-        
-        print("Nội dung file torrent:")
-        print(f"Announce: {torrent_data[b'announce'].decode()}")
-        print("Info:")
-        info = torrent_data[b'info']
-        print(f"  Name: {info[b'name'].decode()}")
-        print(f"  Piece Length: {info[b'piece length']}")
-        print(f"  Length: {info[b'length']}")
-        print(f"  Pieces: {len(info[b'pieces'])} bytes")
-        print(f"  Number of Pieces: {len(info[b'pieces']) // 20}")  # Mỗi piece hash là 20 bytes
-
     def get_peers_for_file(self, magnet_link):
         data = {
             "magnet_text": magnet_link
@@ -294,65 +263,6 @@ class Node:
             print(f"Lỗi khi lấy thông tin peers: {e}")
             print(traceback.format_exc())
         return None
-
-    def decode_torrent_file(self, torrent_path):
-        with open(torrent_path, 'rb') as f:
-            torrent_data = bencodepy.decode(f.read())
-        
-        # Tạo thư mục temp
-        temp_dir = tempfile.mkdtemp(prefix="torrent_decoded_")
-        
-        # Xử lý đặc biệt cho trường 'pieces'
-        if b'info' in torrent_data and b'pieces' in torrent_data[b'info']:
-            pieces = torrent_data[b'info'][b'pieces']
-            piece_hashes = [pieces[i:i+20].hex() for i in range(0, len(pieces), 20)]
-            torrent_data[b'info'][b'pieces'] = piece_hashes
-
-        # Xuất nội dung torrent đã giải mã
-        decoded_path = os.path.join(temp_dir, "decoded_torrent.json")
-        with open(decoded_path, 'w', encoding='utf-8') as f:
-            json.dump(self.decode_bytes_in_dict(torrent_data), f, indent=2)
-        
-        print(f"Nội dung torrent đã được giải mã và lưu tại: {decoded_path}")
-        
-        # Lấy và xuất danh sách hash piece
-        piece_hashes_path = os.path.join(temp_dir, "piece_hashes.json")
-        with open(piece_hashes_path, 'w') as f:
-            json.dump(piece_hashes, f, indent=2)
-        
-        print(f"Danh sách hash piece đã được lưu tại: {piece_hashes_path}")
-        
-        return temp_dir, piece_hashes
-
-    def decode_bytes_in_dict(self, d):
-        decoded = {}
-        for key, value in d.items():
-            if isinstance(key, bytes):
-                key = key.decode('utf-8')
-            if isinstance(value, bytes):
-                value = value.decode('utf-8', errors='replace')
-            elif isinstance(value, dict):
-                value = self.decode_bytes_in_dict(value)
-            elif isinstance(value, list):
-                value = [self.decode_bytes_in_dict(item) if isinstance(item, dict) else item for item in value]
-            decoded[key] = value
-        return decoded
-
-    # Phương thức để sử dụng chức năng này
-    def analyze_torrent(self, torrent_file_name):
-        torrent_path = os.path.join(self.torrent_dir, torrent_file_name)
-        if os.path.exists(torrent_path):
-            temp_dir, piece_hashes = self.decode_torrent_file(torrent_path)
-            print(f"Số lượng piece: {len(piece_hashes)}")
-            return temp_dir, piece_hashes
-        else:
-            print(f"Không tìm thấy file torrent: {torrent_path}")
-            return None, None
-
-    def connect_to_peer(self, peer_ip, peer_port):
-        peer_connection = PeerConnection(self, (peer_ip, peer_port))  # Bỏ tham số is_initiator
-        peer_connection.start()
-        return peer_connection
 
     def start_listening(self):
         listener = PeerConnection(self, ('0.0.0.0', self.port), is_initiator=False)
@@ -436,61 +346,6 @@ class Node:
             self.peer_connections.append(peer_conn)
             peer_conn.start()
 
-    def process_magnet_response(self, response_data):
-        if isinstance(response_data, dict):
-            if 'torrentFile' in response_data and 'torrentFileSize' in response_data:
-                try:
-                    # Giải mã base64
-                    torrent_data = base64.b64decode(response_data['torrentFile'])
-                    
-                    # Kiểm tra kích thước
-                    if len(torrent_data) == response_data['torrentFileSize']:
-                        # Lưu file torrent
-                        torrent_file_name = f"{response_data['name']}.torrent"
-                        torrent_path = os.path.join(self.torrent_dir, torrent_file_name)
-                        with open(torrent_path, 'wb') as f:
-                            f.write(torrent_data)
-                        print(f"Đã lưu file torrent: {torrent_path}")
-
-                        # Giải mã torrent
-                        decoded_torrent = bencodepy.decode(torrent_data)
-                        info = decoded_torrent[b'info']
-                        
-                        # Xử lý pieces
-                        pieces = info[b'pieces']
-                        piece_hashes = [pieces[i:i+20].hex() for i in range(0, len(pieces), 20)]
-                        
-                        # Tạo thông tin torrent đã giải mã
-                        decoded_info = {
-                            'name': info[b'name'].decode('utf-8'),
-                            'piece length': info[b'piece length'],
-                            'pieces': piece_hashes,
-                            'length': info[b'length']
-                        }
-                        
-                        # Lưu thông tin đã giải mã
-                        decoded_json_path = os.path.join(self.torrent_dir, f"{response_data['name']}_decoded.json")
-                        with open(decoded_json_path, 'w', encoding='utf-8') as f:
-                            json.dump(decoded_info, f, indent=2)
-                        
-                        return {
-                            'name': response_data['name'],
-                            'pieces': piece_hashes,
-                            'decoded_torrent': decoded_info
-                        }
-                except Exception as e:
-                    print(f"Lỗi khi xử lý file torrent: {str(e)}")
-                    print(traceback.format_exc())
-        return None
-
-    def get_file_info(self, magnet_link):
-        # Trả về thông tin về file dựa trên magnet link
-        # Thông tin này có thể được lấy từ file torrent đã được lưu
-        return {
-            'total_pieces': len(self.get_torrent_info(magnet_link)['pieces']),
-            'piece_length': self.piece_length
-        }
-
     def get_torrent_info(self, magnet_link):
         """Lấy thông tin torrent từ magnet link"""
         try:
@@ -551,18 +406,6 @@ class Node:
         except Exception as e:
             print(f"Lỗi khi lấy dữ liệu piece: {str(e)}")
             return None
-
-    def save_piece(self, piece_index, piece_data):
-        # Lưu piece đã nhận được
-        if self.current_magnet_link:
-            file_info = self.get_torrent_info(self.current_magnet_link)
-            if file_info:
-                file_name = file_info['name']
-                piece_dir = os.path.join(self.pieces_dir, file_name)
-                os.makedirs(piece_dir, exist_ok=True)
-                piece_path = os.path.join(piece_dir, str(piece_index))
-                with open(piece_path, 'wb') as f:
-                    f.write(piece_data)
 
     def get_piece_hash(self, piece_index):
         # Lấy hash của piece từ file torrent đã giải mã
@@ -727,8 +570,6 @@ class Node:
             for peer_conn in self.peer_connections:
                 peer_conn.cleanup()
                 
-            # In thống kê
-            self.print_download_statistics()
             
             print(f"Đã tải xong file: {self.current_file_name}")
             
@@ -739,19 +580,6 @@ class Node:
             
         except Exception as e:
             print(f"Lỗi khi hoàn thành tải file: {e}")
-
-    def print_download_statistics(self):
-        """In thống kê về quá trình tải"""
-        if self.current_magnet_link:
-            stats = self.download_manager.get_download_stats(self.current_magnet_link)
-            if stats:
-                print("\n=== Thống kê tải file ===")
-                print(f"Tên file: {self.current_file_name}")
-                print(f"Thời gian tải: {stats['duration']:.2f} giây")
-                print(f"Tổng số piece: {stats['total_pieces']}")
-                print("\nThông tin các piece:")
-                for piece_index, peer_info in stats['piece_sources'].items():
-                    print(f"Piece {piece_index}: Tải từ {peer_info['ip']}:{peer_info['port']}")
 
     def disconnect_all_peers(self):
         """Ngắt tất cả các kết nối peer"""

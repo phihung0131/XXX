@@ -1,5 +1,3 @@
-import time
-
 class PeerSelector:
     def __init__(self):
         self.peer_stats = {}  # {peer_id: {speed: float, success_rate: float}}
@@ -54,10 +52,6 @@ class PeerSelector:
 
     def add_connection(self, peer_id):
         self.active_connections[peer_id] = self.active_connections.get(peer_id, 0) + 1
-
-    def remove_connection(self, peer_id):
-        if peer_id in self.active_connections:
-            self.active_connections[peer_id] = max(0, self.active_connections[peer_id] - 1)
 
     def update_peer_stats(self, peer_id, download_speed, success):
         if peer_id not in self.peer_stats:
