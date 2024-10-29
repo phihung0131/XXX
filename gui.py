@@ -4,6 +4,8 @@ from node import Node
 import threading
 import os  # Thêm dòng này
 import json
+import sys  # thêm dòng này
+import io   # thêm dòng này
 
 class NodeGUI:
     def __init__(self, master):
@@ -51,6 +53,10 @@ class NodeGUI:
         self.node_thread.start()
         self.node.start_listening()
         
+        # Thêm StringIO để capture output
+        self.output_buffer = io.StringIO()
+        sys.stdout = self.output_buffer
+
         # Cập nhật GUI định kỳ
         self.update_gui()
         
@@ -80,19 +86,21 @@ class NodeGUI:
                             self.status_label.config(text=f"Đã tải xong file: {self.node.current_file_name}")
                         else:
                             self.status_label.config(text=f"Đang tải: {completed_pieces}/{total_pieces} pieces ({progress:.1f}%)")
-                        
-                        # Cập nhật thông tin chi tiết
-                        details = f"Tên file: {self.node.current_file_name}\n"
-                        details += f"Pieces đã tải: {completed_pieces}/{total_pieces}\n"
-                        details += f"Tiến độ: {progress:.1f}%\n"
-                        
-                        self.details_text.delete(1.0, tk.END)
-                        self.details_text.insert(tk.END, details)
+            
+            # Lấy output từ buffer và hiển thị vào details_text
+            output = self.output_buffer.getvalue()
+            if output:
+                self.details_text.delete(1.0, tk.END)
+                self.details_text.insert(tk.END, output)
+                self.details_text.see(tk.END)  # Tự động cuộn xuống
+                self.output_buffer.truncate(0)
+                self.output_buffer.seek(0)
 
         except Exception as e:
             print(f"Lỗi cập nhật GUI: {e}")
         finally:
             self.master.after(1000, self.update_gui)
+
 
     def share_file(self):
         file_path = filedialog.askopenfilename()
@@ -136,10 +144,11 @@ class NodeGUI:
 
     def on_closing(self):
         if messagebox.askokcancel("Thoát", "Bạn có muốn thoát không?"):
-            print("Đang dừng tất cả các thread...")
-            self.node.stop()  # Dừng node và các thread con
-            self.master.destroy()  # Đóng cửa sổ
-            os._exit(0)  # Kết thúc toàn bộ chương trình
+            # Khôi phục stdout gốc
+            sys.stdout = sys.__stdout__
+            self.node.stop()
+            self.master.destroy()
+            os._exit(0)
 
 def main():
     root = tk.Tk()
