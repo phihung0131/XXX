@@ -27,113 +27,74 @@ class NodeGUI:
         ttk.Button(control_frame, text="Chia sẻ file", command=self.share_file).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="Tải file", command=self.download_file).pack(side=tk.LEFT, padx=5)
         
-        # Frame tải xuống
-        self.download_frame = ttk.LabelFrame(main_frame, text="Trạng thái Tải xuống", padding="5")
-        self.download_frame.pack(fill=tk.X, pady=5)
+        # Frame tiến độ
+        progress_frame = ttk.LabelFrame(main_frame, text="Tiến độ", padding="5")
+        progress_frame.pack(fill=tk.X, pady=5)
         
         self.progress_var = tk.DoubleVar()
-        self.download_progress = ttk.Progressbar(self.download_frame, mode='determinate', variable=self.progress_var)
-        self.download_progress.pack(fill=tk.X, pady=5)
+        self.progress_bar = ttk.Progressbar(progress_frame, variable=self.progress_var, maximum=100)
+        self.progress_bar.pack(fill=tk.X, pady=5)
         
-        stats_frame = ttk.Frame(self.download_frame)
-        stats_frame.pack(fill=tk.X)
+        self.status_label = ttk.Label(progress_frame, text="")
+        self.status_label.pack(fill=tk.X, pady=5)
         
-        self.status_label = ttk.Label(stats_frame, text="")
-        self.status_label.pack(side=tk.LEFT, padx=5)
+        # Frame thông tin chi tiết
+        details_frame = ttk.LabelFrame(main_frame, text="Thông tin chi tiết", padding="5")
+        details_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        self.download_speed = ttk.Label(stats_frame, text="Tốc độ: 0 KB/s")
-        self.download_speed.pack(side=tk.RIGHT, padx=5)
-        
-        self.piece_status = ttk.Label(stats_frame, text="Pieces: 0/0")
-        self.piece_status.pack(side=tk.RIGHT, padx=5)
-        
-        # Frame chia sẻ
-        self.upload_frame = ttk.LabelFrame(main_frame, text="File đang chia sẻ", padding="5")
-        self.upload_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        
-        # Treeview cho danh sách file chia sẻ
-        columns = ('name', 'size', 'pieces', 'peers', 'speed')
-        self.shared_files = ttk.Treeview(self.upload_frame, columns=columns, show='headings')
-        self.shared_files.heading('name', text='Tên file')
-        self.shared_files.heading('size', text='Kích thước')
-        self.shared_files.heading('pieces', text='Pieces')
-        self.shared_files.heading('peers', text='Peers')
-        self.shared_files.heading('speed', text='Tốc độ')
-        self.shared_files.pack(fill=tk.BOTH, expand=True)
+        self.details_text = tk.Text(details_frame, height=10, wrap=tk.WORD)
+        self.details_text.pack(fill=tk.BOTH, expand=True)
         
         # Khởi động node và GUI
+        self.node_thread = threading.Thread(target=self.node.run)
+        self.node_thread.daemon = True
+        self.node_thread.start()
         self.node.start_listening()
+        
+        # Cập nhật GUI định kỳ
         self.update_gui()
-        self.start_node()
         
         # Xử lý đóng cửa sổ
         master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-    def get_file_info(self, magnet_link):
-        """Hàm bổ trợ để lấy thông tin file"""
-        try:
-            info = self.node.shared_files.get(magnet_link, {})
-            file_path = info.get('file_path', '')
-            if os.path.exists(file_path):
-                return {
-                    'name': info.get('file_name', ''),
-                    'size': os.path.getsize(file_path),
-                    'pieces': len(info.get('pieces', [])),
-                    'peers': len(info.get('peers', [])),
-                    'speed': info.get('upload_speed', 0)
-                }
-        except Exception as e:
-            print(f"Lỗi khi lấy thông tin file: {e}")
-        return None
-
     def update_gui(self):
         """Cập nhật GUI mỗi giây"""
         try:
-            # Cập nhật thông tin tải xuống
             if self.node.current_magnet_link:
                 stats = self.node.download_manager.get_download_stats(self.node.current_magnet_link)
                 if stats:
+                    # Cập nhật tiến độ tải
                     progress = (stats['completed_pieces'] / stats['total_pieces']) * 100
-                    self.download_progress['value'] = progress
-                    self.piece_status['text'] = f"Pieces: {stats['completed_pieces']}/{stats['total_pieces']}"
-                    self.download_speed['text'] = f"Tốc độ: {stats.get('speed', 0):.1f} KB/s"
+                    self.progress_var.set(progress)
                     
-                    if progress == 100:
-                        self.download_status['text'] = "Hoàn tất"
-                    else:
-                        self.download_status['text'] = "Đang tải..."
-
-            # Cập nhật danh sách file chia sẻ
-            self.update_shared_files()
-            
+                    # Cập nhật thông tin chi tiết
+                    details = f"Tên file: {self.node.current_file_name}\n"
+                    details += f"Đã tải: {stats['completed_pieces']}/{stats['total_pieces']} pieces\n"
+                    details += f"Thời gian: {stats['duration']:.1f} giây\n"
+                    self.details_text.delete(1.0, tk.END)
+                    self.details_text.insert(tk.END, details)
         except Exception as e:
-            print(f"Lỗi cập nhật GUI: {str(e)}")
+            print(f"Lỗi cập nhật GUI: {e}")
         finally:
             self.master.after(1000, self.update_gui)
 
     def share_file(self):
-        """Xử lý chia sẻ file"""
         file_path = filedialog.askopenfilename()
         if file_path:
-            self.download_status['text'] = "Đang xử lý file..."
-            self.download_progress['value'] = 0
+            self.progress_var.set(0)
+            self.status_label.config(text="Đang xử lý file...")
             self.node.share_file(file_path, self.update_share_progress)
 
     def update_share_progress(self, current, total, magnet_link=None, torrent_path=None):
-        """Cập nhật tiến độ xử lý file chia sẻ"""
         progress = (current / total) * 100
-        self.download_progress['value'] = progress
-        
+        self.progress_var.set(progress)
         if magnet_link and torrent_path:
-            self.download_status['text'] = "Đã chia sẻ file thành công"
-            messagebox.showinfo("Thành công", 
-                f"File đã được chia sẻ.\nMagnet link: {magnet_link}\nTorrent file: {torrent_path}")
+            self.status_label.config(text=f"File đã được chia sẻ.\nMagnet link: {magnet_link}\nTorrent file: {torrent_path}")
         else:
-            self.download_status['text'] = f"Đang xử lý: {current}/{total} pieces"
+            self.status_label.config(text=f"Đang xử lý: {current}/{total} pieces")
         self.master.update_idletasks()
 
     def download_file(self):
-        """Xử lý tải file"""
         magnet_link = simpledialog.askstring("Tải file", "Nhập magnet link:")
         if magnet_link:
             peers_data = self.node.get_peers_for_file(magnet_link)
@@ -145,51 +106,24 @@ class NodeGUI:
                     # Bắt đầu tải từ nhiều nguồn
                     self.node.connect_and_request_pieces(peers_data)
                     
-                    self.download_status['text'] = "Đang tải file..."
-                    self.piece_status['text'] = f"Pieces: 0/{len(peers_data.get('pieces', []))}"
+                    num_pieces = len(peers_data.get('pieces', []))
+                    self.status_label.config(text=f"Đang tải {num_pieces} pieces từ nhiều nguồn...")
                 else:
                     messagebox.showerror("Lỗi", "Dữ liệu peers không hợp lệ")
 
-    def start_node(self):
-        """Khởi động node trong thread riêng"""
-        self.node_thread = threading.Thread(target=self.node.run)
-        self.node_thread.daemon = True
-        self.node_thread.start()
+    def analyze_torrent(self):
+        torrent_file_name = filedialog.askopenfilename(initialdir=self.node.torrent_dir, filetypes=[("Torrent files", "*.torrent")])
+        if torrent_file_name:
+            temp_dir, piece_hashes = self.node.analyze_torrent(os.path.basename(torrent_file_name))
+            if temp_dir and piece_hashes:
+                messagebox.showinfo("Phân tích Torrent", f"Kết quả phân tích đã được lưu trong thư mục: {temp_dir}")
 
     def on_closing(self):
-        """Xử lý khi đóng cửa sổ"""
         if messagebox.askokcancel("Thoát", "Bạn có muốn thoát không?"):
-            self.node.running = False
-            self.master.destroy()
-
-    def update_shared_files(self):
-        """Cập nhật danh sách file chia sẻ"""
-        for item in self.shared_files.get_children():
-            self.shared_files.delete(item)
-            
-        for magnet_link, info in self.node.shared_files.items():
-            try:
-                file_info = self.get_file_info(magnet_link)
-                if file_info:
-                    self.shared_files.insert('', 'end', values=(
-                        file_info['name'],
-                        self.format_size(os.path.getsize(info['file_path'])),
-                        f"0/{file_info['pieces']}", 
-                        file_info['peers'],
-                        f"{file_info['speed']:.1f} KB/s"
-                    ))
-            except Exception as e:
-                print(f"Lỗi khi cập nhật thông tin file {magnet_link}: {str(e)}")
-
-    @staticmethod
-    def format_size(size):
-        """Format kích thước file"""
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"
-
+            print("Đang dừng tất cả các thread...")
+            self.node.stop()  # Dừng node và các thread con
+            self.master.destroy()  # Đóng cửa sổ
+            os._exit(0)  # Kết thúc toàn bộ chương trình
 
 def main():
     root = tk.Tk()
