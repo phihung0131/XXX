@@ -92,7 +92,7 @@ class NodeGUI:
             if output:
                 self.details_text.delete(1.0, tk.END)
                 self.details_text.insert(tk.END, output)
-                self.details_text.see(tk.END)  # Tự động cuộn xuống
+                self.details_text.see(tk.END)  # Tự động cuộn xuốngg
                 self.output_buffer.truncate(0)
                 self.output_buffer.seek(0)
 
