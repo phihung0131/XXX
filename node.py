@@ -32,9 +32,11 @@ class Node:
         self.node_data_dir = "node_data"
         self.torrent_dir = os.path.join(self.node_data_dir, "torrents")
         self.pieces_dir = os.path.join(self.node_data_dir, "pieces")
+        self.downloads_dir = os.path.join(self.node_data_dir, 'downloads')
         os.makedirs(self.node_data_dir, exist_ok=True)
         os.makedirs(self.torrent_dir, exist_ok=True)
         os.makedirs(self.pieces_dir, exist_ok=True)
+        os.makedirs(self.downloads_dir, exist_ok=True)
         self.current_magnet_link = None
         self.current_file_name = None  # Thêm dòng này
         self.shared_files = {}  # Lưu mapping giữa magnet link và thông tin file
