@@ -621,7 +621,8 @@ class Node:
                 'magnet_link': self.current_magnet_link
             }
             self.shared_files[self.current_magnet_link] = file_info
-            self.save_shared_files            
+            self.save_shared_files()
+            
             # Thông báo tất cả piece cho tracker
             self.announce_all_pieces_to_tracker(torrent_info)
 
