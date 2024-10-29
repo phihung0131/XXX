@@ -3,6 +3,7 @@ import threading
 import json
 import traceback
 import base64
+import time
 
 class PeerConnection(threading.Thread):
     def __init__(self, node, peer_address, assigned_pieces=None, is_initiator=True):
@@ -26,32 +27,37 @@ class PeerConnection(threading.Thread):
                 print(f"Leecher: Đang kết nối đến {self.peer_address[0]}:{self.peer_address[1]}")
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công đến {self.peer_address[0]}:{self.peer_address[1]}")
-            else:  # Seeder
-                while self.node.running:  # Vòng lặp cho seeder
-                    try:
-                        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                        server_socket.bind(('0.0.0.0', self.node.port))
-                        server_socket.listen(1)
-                        print(f"Seeder: Đang lắng nghe tại port {self.node.port}")
-                        
-                        self.sock, client_address = server_socket.accept()
-                        print(f"Seeder: Đã chấp nhận kết nối từ {client_address[0]}:{client_address[1]}")
-                        server_socket.close()
-
-                        # Xử lý kết nối hiện tại
-                        self.handle_connection()
-                        
-                        # Sau khi kết nối kết thúc, quay lại lắng nghe
-                        print("Seeder: Quay lại lắng nghe kết nối mới...")
-                        
-                    except Exception as e:
-                        print(f"Seeder: Lỗi trong vòng lặp lắng nghe: {e}")
-                        threading.Event().wait(1)  # Đợi 1 giây trước khi thử lại
-                        
-            if self.is_initiator:  # Chỉ xử lý một lần cho leecher
                 self.handle_connection()
-                
+            else:  # Seeder
+                server_socket = None
+                try:
+                    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)  # Thêm option này
+                    server_socket.bind(('0.0.0.0', self.node.port))
+                    server_socket.listen(1)
+                    print(f"Seeder: Đang lắng nghe tại port {self.node.port}")
+                    
+                    while self.node.running:
+                        try:
+                            self.sock, client_address = server_socket.accept()
+                            print(f"Seeder: Đã chấp nhận kết nối từ {client_address[0]}:{client_address[1]}")
+                            self.handle_connection()
+                        except socket.error as e:
+                            if not self.node.running:
+                                break
+                            print(f"Seeder: Lỗi khi chấp nhận kết nối: {e}")
+                            time.sleep(1)
+                        
+                except Exception as e:
+                    print(f"Seeder: Lỗi khi tạo server socket: {e}")
+                finally:
+                    if server_socket:
+                        try:
+                            server_socket.close()
+                        except:
+                            pass
+                        
         except Exception as e:
             print(f"Lỗi trong peer connection: {e}")
         finally:

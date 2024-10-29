@@ -751,6 +751,7 @@ class Node:
         for conn in self.peer_connections[:]:  # Tạo bản sao để tránh lỗi khi xóa
             try:
                 conn.cleanup()
+                conn.join(timeout=2)  # Chờ thread kết thúc với timeout
             except Exception as e:
                 print(f"Lỗi khi ngắt kết nối peer: {e}")
         self.peer_connections.clear()
