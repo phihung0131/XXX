@@ -60,19 +60,36 @@ class NodeGUI:
     def update_gui(self):
         """Cập nhật GUI mỗi giây"""
         try:
+            # Cập nhật thông tin tải xuống
             if self.node.current_magnet_link:
                 stats = self.node.download_manager.get_download_stats(self.node.current_magnet_link)
                 if stats:
-                    # Cập nhật tiến độ tải
-                    progress = (stats['completed_pieces'] / stats['total_pieces']) * 100
+                    # Tính toán tiến độ dựa trên số piece đã nhận
+                    completed = stats['completed_pieces']
+                    total = stats['total_pieces']
+                    progress = (completed / total) * 100 if total > 0 else 0
+                    
+                    # Cập nhật thanh tiến độ
                     self.progress_var.set(progress)
+                    
+                    # Cập nhật nhãn trạng thái
+                    self.status_label.config(text=f"Đã tải: {completed}/{total} pieces ({progress:.1f}%)")
                     
                     # Cập nhật thông tin chi tiết
                     details = f"Tên file: {self.node.current_file_name}\n"
-                    details += f"Đã tải: {stats['completed_pieces']}/{stats['total_pieces']} pieces\n"
-                    details += f"Thời gian: {stats['duration']:.1f} giây\n"
+                    details += f"Thời gian tải: {stats['duration']:.1f} giây\n"
+                    details += f"Số piece đã tải: {completed}/{total}\n"
+                    details += f"Tiến độ: {progress:.1f}%\n"
+                    
+                    # Thêm thông tin về nguồn tải
+                    if 'piece_sources' in stats:
+                        details += "\nNguồn tải:\n"
+                        for piece, peer in stats['piece_sources'].items():
+                            details += f"Piece {piece}: {peer['ip']}:{peer['port']}\n"
+                    
                     self.details_text.delete(1.0, tk.END)
                     self.details_text.insert(tk.END, details)
+
         except Exception as e:
             print(f"Lỗi cập nhật GUI: {e}")
         finally:
