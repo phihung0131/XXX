@@ -42,6 +42,7 @@ class Node:
         self.shared_files = {}  # Lưu mapping giữa magnet link và thông tin file
         self.shared_files_path = os.path.join(self.node_data_dir, 'shared_files.json')
         self.load_shared_files()  # Load thông tin shared files khi khởi động
+        self.peer_connections = []  # Thêm khởi tạo peer_connections
 
     def stop(self):
         self.running = False
