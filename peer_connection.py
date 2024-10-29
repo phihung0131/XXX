@@ -181,7 +181,7 @@ class PeerConnection(threading.Thread):
     def cleanup(self):
         """Dọn dẹp và đóng kết nối"""
         if self.running:
-            self.running = False  # Đặt running = False trước
+            # self.running = True  # Đặt running = False trước
             
             if hasattr(self, 'sock') and self.sock:
                 try:
