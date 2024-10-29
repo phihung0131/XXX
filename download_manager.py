@@ -99,7 +99,7 @@ class DownloadManager(threading.Thread):
             if magnet_link in self.downloads:
                 del self.downloads[magnet_link]
                 if self.is_download_complete(download_info):
-                    # Khởi động lại trạng thái lắng nghe
+                    # Khởi động lại trạng thái lắng nghee
                     self.node.start_listening()
                 # Yêu cầu lại piece không hợp lệ
 
