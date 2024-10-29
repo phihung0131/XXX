@@ -91,7 +91,7 @@ class NodeGUI:
             self.update_shared_files()
             
         except Exception as e:
-            print(f"Lỗi cập nhật GUI: {e}")
+            print(f"Lỗi cập nhật GUI: {str(e)}")
         finally:
             self.master.after(1000, self.update_gui)
 
@@ -103,12 +103,27 @@ class NodeGUI:
             
         # Thêm thông tin file mới
         for magnet_link, info in self.node.shared_files.items():
-            size = self.format_size(info['size'])
-            pieces = f"{len(info.get('completed_pieces', []))}/{len(info.get('pieces', []))}"
-            peers = len(info.get('peers', []))
-            speed = f"{info.get('upload_speed', 0):.1f} KB/s"
-            
-            self.shared_files.insert('', 'end', values=(size, pieces, peers, speed))
+            try:
+                # Lấy thông tin file từ torrent
+                torrent_info = self.node.get_decoded_torrent_info(magnet_link)
+                if torrent_info:
+                    file_size = torrent_info.get('length', 0)
+                    total_pieces = len(torrent_info.get('pieces', []))
+                    completed_pieces = len(info.get('completed_pieces', []))
+                    peers = len(info.get('peers', []))
+                    upload_speed = info.get('upload_speed', 0)
+                    
+                    values = (
+                        self.format_size(file_size),
+                        f"{completed_pieces}/{total_pieces}",
+                        str(peers),
+                        f"{upload_speed:.1f} KB/s"
+                    )
+                    
+                    self.shared_files.insert('', 'end', text=info.get('name', ''), values=values)
+                    
+            except Exception as e:
+                print(f"Lỗi khi cập nhật thông tin file {magnet_link}: {str(e)}")
 
     @staticmethod
     def format_size(size):
