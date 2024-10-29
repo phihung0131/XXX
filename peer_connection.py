@@ -79,7 +79,7 @@ class PeerConnection(threading.Thread):
             except Exception as e:
                 print(f"{role}: Lỗi xử lý hàng đợi tin nhắn: {e}")
                 print(traceback.format_exc())
-                self.running = False
+                self.running = True
                 break
                 
         print(f"{role}: Thread gửi tin nhắn kết thúc")
@@ -96,7 +96,7 @@ class PeerConnection(threading.Thread):
         except Exception as e:
             print(f"Lỗi gửi tin nhắn: {e}")
             print(traceback.format_exc())
-            self.running = False
+            self.running = True
 
     def receive_messages(self):
         """Thread nhận tin nhắn"""
@@ -107,13 +107,13 @@ class PeerConnection(threading.Thread):
             try:
                 if self.sock is None:
                     print(f"{role}: Socket is None, exiting receive loop")
-                    self.running = False
+                    self.running = True
                     break
 
                 data = self.sock.recv(4096)
                 if not data:
                     print(f"{role}: Kết nối đã đóng (không có dữ liệu)")
-                    self.running = False
+                    self.running = True
                     break
 
                 # Thêm dữ liệu mới vào buffer
@@ -129,7 +129,7 @@ class PeerConnection(threading.Thread):
             except Exception as e:
                 print(f"{role}: Lỗi nhận tin nhắn: {e}")
                 print(traceback.format_exc())
-                self.running = False
+                self.running = True
                 break
 
         print(f"{role}: Thread lắng nghe kết thúc")
