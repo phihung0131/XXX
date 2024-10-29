@@ -60,31 +60,34 @@ class NodeGUI:
     def update_gui(self):
         """Cập nhật GUI mỗi giây"""
         try:
-            if self.node.current_magnet_link:
-                stats = self.node.download_manager.get_download_stats(self.node.current_magnet_link)
-                if stats:
-                    # Cập nhật thanh tiến độ
-                    self.progress_var.set(stats['progress'])
+            if self.node.current_file_name:
+                # Đếm số piece đã tải trong thư mục
+                piece_dir = os.path.join(self.node.pieces_dir, self.node.current_file_name)
+                if os.path.exists(piece_dir):
+                    completed_pieces = len([f for f in os.listdir(piece_dir) if f.startswith('piece_')])
                     
-                    # Cập nhật thông tin trạng thái
-                    status = f"Đã tải: {stats['completed_pieces']}/{stats['total_pieces']} pieces "
-                    status += f"({stats['progress']:.1f}%) - {stats['speed']:.1f} KB/s"
-                    self.status_label.config(text=status)
-                    
-                    # Cập nhật thông tin chi tiết
-                    details = f"Tên file: {self.node.current_file_name}\n"
-                    details += f"Thời gian tải: {stats['duration']:.1f} giây\n"
-                    details += f"Tốc độ tải: {stats['speed']:.1f} KB/s\n"
-                    details += f"Tiến độ: {stats['progress']:.1f}%\n"
-                    details += f"Pieces đã tải: {stats['completed_pieces']}/{stats['total_pieces']}\n"
-                    
-                    if stats['piece_sources']:
-                        details += "\nNguồn tải:\n"
-                        for piece, peer in stats['piece_sources'].items():
-                            details += f"Piece {piece}: {peer['ip']}:{peer['port']}\n"
-                    
-                    self.details_text.delete(1.0, tk.END)
-                    self.details_text.insert(tk.END, details)
+                    # Lấy tổng số piece từ torrent_info
+                    torrent_info = self.node.get_decoded_torrent_info()
+                    if torrent_info:
+                        total_pieces = len(torrent_info['pieces'])
+                        
+                        # Cập nhật thanh tiến độ
+                        progress = (completed_pieces / total_pieces) * 100 if total_pieces > 0 else 0
+                        self.progress_var.set(progress)
+                        
+                        # Cập nhật nhãn trạng thái
+                        if completed_pieces == total_pieces:
+                            self.status_label.config(text=f"Đã tải xong file: {self.node.current_file_name}")
+                        else:
+                            self.status_label.config(text=f"Đang tải: {completed_pieces}/{total_pieces} pieces ({progress:.1f}%)")
+                        
+                        # Cập nhật thông tin chi tiết
+                        details = f"Tên file: {self.node.current_file_name}\n"
+                        details += f"Pieces đã tải: {completed_pieces}/{total_pieces}\n"
+                        details += f"Tiến độ: {progress:.1f}%\n"
+                        
+                        self.details_text.delete(1.0, tk.END)
+                        self.details_text.insert(tk.END, details)
 
         except Exception as e:
             print(f"Lỗi cập nhật GUI: {e}")

@@ -178,25 +178,11 @@ class DownloadManager(threading.Thread):
         """Lấy thống kê về quá trình tải"""
         if magnet_link in self.downloads:
             download_info = self.downloads[magnet_link]
-            completed = len(download_info['completed_pieces'])
-            total = len(download_info['peers_data']['pieces'])
-            
             return {
                 'start_time': download_info['start_time'],
                 'duration': time.time() - download_info['start_time'],
-                'total_pieces': total,
-                'completed_pieces': completed,
-                'progress': (completed / total * 100) if total > 0 else 0,
-                'piece_sources': download_info['piece_sources'],
-                'speed': self.calculate_download_speed(download_info)
+                'total_pieces': len(download_info['peers_data']['pieces']),
+                'completed_pieces': len(download_info['completed_pieces']),
+                'piece_sources': download_info['piece_sources']
             }
         return None
-
-    def calculate_download_speed(self, download_info):
-        """Tính tốc độ tải trung bình (KB/s)"""
-        duration = time.time() - download_info['start_time']
-        if duration > 0:
-            completed_pieces = len(download_info['completed_pieces'])
-            total_bytes = completed_pieces * self.node.piece_length
-            return (total_bytes / 1024) / duration
-        return 0
