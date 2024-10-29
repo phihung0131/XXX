@@ -25,37 +25,31 @@ class PeerConnection(threading.Thread):
                 self.sock.connect(self.peer_address)
                 print(f"Leecher: Đã kết nối thành công đến {self.peer_address[0]}:{self.peer_address[1]}")
             else:  # Seeder
-                server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                server_socket.bind(('0.0.0.0', self.node.port))
-                server_socket.listen(1)
-                print(f"Seeder: Đang lắng nghe tại port {self.node.port}")
+                while self.node.running:  # Vòng lặp cho seeder
+                    try:
+                        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        server_socket.bind(('0.0.0.0', self.node.port))
+                        server_socket.listen(1)
+                        print(f"Seeder: Đang lắng nghe tại port {self.node.port}")
+                        
+                        self.sock, client_address = server_socket.accept()
+                        print(f"Seeder: Đã chấp nhận kết nối từ {client_address[0]}:{client_address[1]}")
+                        server_socket.close()
+
+                        # Xử lý kết nối hiện tại
+                        self.handle_connection()
+                        
+                        # Sau khi kết nối kết thúc, quay lại lắng nghe
+                        print("Seeder: Quay lại lắng nghe kết nối mới...")
+                        
+                    except Exception as e:
+                        print(f"Seeder: Lỗi trong vòng lặp lắng nghe: {e}")
+                        threading.Event().wait(1)  # Đợi 1 giây trước khi thử lại
+                        
+            if self.is_initiator:  # Chỉ xử lý một lần cho leecher
+                self.handle_connection()
                 
-                self.sock, client_address = server_socket.accept()
-                print(f"Seeder: Đã chấp nhận kết nối từ {client_address[0]}:{client_address[1]}")
-                server_socket.close()
-
-            # Khởi động thread nhận tin nhắn
-            receive_thread = threading.Thread(target=self.receive_messages)
-            receive_thread.daemon = True
-            receive_thread.start()
-
-            # Khởi động thread gửi tin nhắn
-            send_thread = threading.Thread(target=self.process_message_queue)
-            send_thread.daemon = True
-            send_thread.start()
-
-            if self.is_initiator:
-                # Gửi HELLO nếu là leecher
-                self.queue_message({"type": "HELLO"})
-
-            # Giữ thread chính chạy
-            while self.node.running:  # Thay vì while self.running
-                if not (receive_thread.is_alive() and send_thread.is_alive()):
-                    print("Một trong các thread đã dừng, kết thúc kết nối")
-                    break
-                threading.Event().wait(1)
-
         except Exception as e:
             print(f"Lỗi trong peer connection: {e}")
         finally:
@@ -210,3 +204,26 @@ class PeerConnection(threading.Thread):
                     self.node.peer_connections.remove(self)
                 except ValueError:
                     pass  # Bỏ qua nếu connection không còn trong list
+
+    def handle_connection(self):
+        """Xử lý một kết nối cụ thể"""
+        # Khởi động thread nhận tin nhắn
+        receive_thread = threading.Thread(target=self.receive_messages)
+        receive_thread.daemon = True
+        receive_thread.start()
+
+        # Khởi động thread gửi tin nhắn
+        send_thread = threading.Thread(target=self.process_message_queue)
+        send_thread.daemon = True
+        send_thread.start()
+
+        if self.is_initiator:
+            # Gửi HELLO nếu là leecher
+            self.queue_message({"type": "HELLO"})
+
+        # Giữ kết nối cho đến khi một trong các thread dừng
+        while self.running:
+            if not (receive_thread.is_alive() and send_thread.is_alive()):
+                print("Một trong các thread đã dừng, kết thúc kết nối")
+                break
+            threading.Event().wait(1)
