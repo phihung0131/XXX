@@ -82,12 +82,10 @@ class DownloadManager(threading.Thread):
     def finish_download(self, magnet_link, download_info):
         """Hoàn thành quá trình tải"""
         try:
-            # Ghép các piece thành file hoàn chỉnh
-            self.combine_pieces(magnet_link, download_info)
-            print(f"Đã tải xong file: {download_info['file_name']}")
+            # Thông báo cho node để ghép file và xử lý cleanup
+            self.node.finish_download()
             
-            # Ngắt kết nối với tất cả peer
-            self.node.disconnect_all_peers()
+            print(f"Đã tải xong file: {download_info['peers_data']['name']}")
             
             # In thống kê
             self.print_download_statistics(magnet_link)
@@ -98,10 +96,6 @@ class DownloadManager(threading.Thread):
             # Xóa thông tin download
             if magnet_link in self.downloads:
                 del self.downloads[magnet_link]
-                if self.is_download_complete(download_info):
-                    # Khởi động lại trạng thái lắng nghe
-                    self.node.start_listening()
-                # Yêu cầu lại piece không hợp lệ
 
     def piece_received(self, magnet_link, piece_index, piece_data):
         download_info = self.downloads.get(magnet_link)
