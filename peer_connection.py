@@ -105,6 +105,11 @@ class PeerConnection(threading.Thread):
         
         while self.running:
             try:
+                if self.sock is None:
+                    print(f"{role}: Socket is None, exiting receive loop")
+                    self.running = False
+                    break
+
                 data = self.sock.recv(4096)
                 if not data:
                     print(f"{role}: Kết nối đã đóng (không có dữ liệu)")
