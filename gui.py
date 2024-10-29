@@ -10,7 +10,6 @@ class NodeGUI:
         self.master = master
         self.node = Node()
         master.title("P2P File Sharing")
-        master.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Frame chính
         main_frame = ttk.Frame(master, padding="10")
@@ -27,19 +26,21 @@ class NodeGUI:
         control_frame.pack(fill=tk.X, pady=5)
         ttk.Button(control_frame, text="Chia sẻ file", command=self.share_file).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="Tải file", command=self.download_file).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Phân tích Torrent", command=self.analyze_torrent).pack(side=tk.LEFT, padx=5)
         
         # Frame tải xuống
         self.download_frame = ttk.LabelFrame(main_frame, text="Trạng thái Tải xuống", padding="5")
         self.download_frame.pack(fill=tk.X, pady=5)
         
-        self.download_progress = ttk.Progressbar(self.download_frame, mode='determinate')
+        self.progress_var = tk.DoubleVar()
+        self.download_progress = ttk.Progressbar(self.download_frame, mode='determinate', variable=self.progress_var)
         self.download_progress.pack(fill=tk.X, pady=5)
         
         stats_frame = ttk.Frame(self.download_frame)
         stats_frame.pack(fill=tk.X)
         
-        self.download_status = ttk.Label(stats_frame, text="")
-        self.download_status.pack(side=tk.LEFT, padx=5)
+        self.status_label = ttk.Label(stats_frame, text="")
+        self.status_label.pack(side=tk.LEFT, padx=5)
         
         self.download_speed = ttk.Label(stats_frame, text="Tốc độ: 0 KB/s")
         self.download_speed.pack(side=tk.RIGHT, padx=5)
@@ -61,9 +62,13 @@ class NodeGUI:
         self.shared_files.heading('speed', text='Tốc độ')
         self.shared_files.pack(fill=tk.BOTH, expand=True)
         
-        # Khởi động cập nhật GUI và node
+        # Khởi động node và GUI
+        self.node.start_listening()
         self.update_gui()
         self.start_node()
+        
+        # Xử lý đóng cửa sổ
+        master.protocol("WM_DELETE_WINDOW", self.on_closing)
 
     def get_file_info(self, magnet_link):
         """Hàm bổ trợ để lấy thông tin file"""
