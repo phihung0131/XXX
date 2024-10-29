@@ -128,3 +128,28 @@ class DownloadManager(threading.Thread):
             else:
                 # Yêu cầu lại piece không hợp lệ
                 self.request_piece(magnet_link, piece_index)
+
+    def piece_completed(self, magnet_link, piece_index):
+        """Xử lý khi một piece được tải xong"""
+        download_info = self.downloads.get(magnet_link)
+        if download_info:
+            # Cập nhật trạng thái
+            download_info['active_pieces'].remove(piece_index)
+            download_info['completed_pieces'].add(piece_index)
+            
+            # Cập nhật thống kê cho peer
+            peer = download_info['piece_sources'].get(piece_index)
+            if peer:
+                peer_id = f"{peer['ip']}:{peer['port']}"
+                self.peer_selector.update_peer_stats(
+                    peer_id, 
+                    download_speed=1.0,  # Có thể tính toán tốc độ thực tế
+                    success=True
+                )
+            
+            # Kiểm tra nếu tải xong
+            if len(download_info['completed_pieces']) == len(download_info['peers_data']['pieces']):
+                self.finish_download(magnet_link, download_info)
+            else:
+                # Tiếp tục tải các piece khác
+                self.request_multiple_pieces(magnet_link)
