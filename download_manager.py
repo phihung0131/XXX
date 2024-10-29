@@ -98,6 +98,9 @@ class DownloadManager(threading.Thread):
             # Xóa thông tin download
             if magnet_link in self.downloads:
                 del self.downloads[magnet_link]
+            
+            # Khởi động lại trạng thái lắng nghe
+            self.node.start_listening()
 
     def piece_received(self, magnet_link, piece_index, piece_data):
         download_info = self.downloads.get(magnet_link)

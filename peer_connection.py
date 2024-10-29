@@ -82,7 +82,7 @@ class PeerConnection(threading.Thread):
                 self.running = False
                 break
                 
-        print(f"{role}: Thread gửi tin nhắn kết thúc")
+        print(f"{role}: Thread gửi tin nhắn k���t thúc")
 
     def send_message(self, message_dict):
         """Gửi tin nhắn trực tiếp qua socket"""
@@ -204,6 +204,10 @@ class PeerConnection(threading.Thread):
                     self.node.peer_connections.remove(self)
                 except ValueError:
                     pass  # Bỏ qua nếu connection không còn trong list
+            
+            # Khởi động lại trạng thái lắng nghe
+            if not self.is_initiator:
+                self.node.start_listening()
 
     def handle_connection(self):
         """Xử lý một kết nối cụ thể"""
