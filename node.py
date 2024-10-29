@@ -43,8 +43,6 @@ class Node:
         self.shared_files_path = os.path.join(self.node_data_dir, 'shared_files.json')
         self.load_shared_files()  # Load thông tin shared files khi khởi động
         self.peer_connections = []  # Thêm khởi tạo peer_connections
-        self.active_connections = []
-        self.max_connections = 3
 
     def stop(self):
         self.running = False
@@ -471,7 +469,7 @@ class Node:
                 file_info = self.shared_files[magnet_link]
                 decoded_json_path = file_info['decoded_json_path']
                 
-                # Nếu file decoded JSON không tồn tại, tạo lại t��� file torrent
+                # Nếu file decoded JSON không tồn tại, tạo lại từ file torrent
                 if not os.path.exists(decoded_json_path):
                     torrent_path = file_info['torrent_path']
                     if os.path.exists(torrent_path):
@@ -733,60 +731,6 @@ class Node:
                 self.peer_connections.remove(peer_conn)
             except Exception as e:
                 print(f"Lỗi khi ngắt kết nối peer: {e}")
-
-    def distribute_pieces(self, peers_data):
-        """Phân phối các piece cho các connection"""
-        needed_pieces = self.get_needed_pieces()
-        if not needed_pieces:
-            return
-            
-        # Tạo danh sách các node có sẵn cho mỗi piece
-        piece_to_nodes = {}
-        for piece in peers_data['pieces']:
-            piece_index = piece['piece_index']
-            if piece_index in needed_pieces:
-                piece_to_nodes[piece_index] = piece['nodes']
-
-        # Tạo connection cho tối đa 3 node khác nhau
-        active_nodes = set()
-        connections_to_create = []
-        
-        for piece_index in needed_pieces:
-            available_nodes = piece_to_nodes.get(piece_index, [])
-            for node in available_nodes:
-                node_key = (node['ip'], node['port'])
-                if node_key not in active_nodes and len(active_nodes) < self.max_connections:
-                    active_nodes.add(node_key)
-                    connections_to_create.append(node_key)
-                if len(active_nodes) >= self.max_connections:
-                    break
-            if len(active_nodes) >= self.max_connections:
-                break
-
-        # Phân phối piece cho các connection
-        piece_assignments = {conn: [] for conn in connections_to_create}
-        current_conn_index = 0
-        
-        for piece_index in needed_pieces:
-            if current_conn_index >= len(connections_to_create):
-                current_conn_index = 0
-            piece_assignments[connections_to_create[current_conn_index]].append(piece_index)
-            current_conn_index += 1
-
-        # Tạo và khởi động các connection
-        for node_key, assigned_pieces in piece_assignments.items():
-            peer_conn = PeerConnection(
-                self,
-                (node_key[0], node_key[1]),
-                assigned_pieces=assigned_pieces,
-                is_initiator=True
-            )
-            self.active_connections.append(peer_conn)
-            peer_conn.start()
-
-    def start_download(self, peers_data):
-        """Bắt đầu quá trình tải xuống"""
-        self.distribute_pieces(peers_data)
 
 
 
