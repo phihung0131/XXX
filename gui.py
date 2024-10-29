@@ -26,7 +26,6 @@ class NodeGUI:
         control_frame.pack(fill=tk.X, pady=5)
         ttk.Button(control_frame, text="Chia sẻ file", command=self.share_file).pack(side=tk.LEFT, padx=5)
         ttk.Button(control_frame, text="Tải file", command=self.download_file).pack(side=tk.LEFT, padx=5)
-        ttk.Button(control_frame, text="Phân tích Torrent", command=self.analyze_torrent).pack(side=tk.LEFT, padx=5)
         
         # Frame tải xuống
         self.download_frame = ttk.LabelFrame(main_frame, text="Trạng thái Tải xuống", padding="5")
