@@ -186,18 +186,27 @@ class PeerConnection(threading.Thread):
 
     def cleanup(self):
         """Dọn dẹp và đóng kết nối"""
-        if hasattr(self, 'sock') and self.sock:
-            try:
-                self.sock.shutdown(socket.SHUT_RDWR)
-            except:
-                pass
-            try:
-                self.sock.close()
-            except:
-                pass
-            print(f"Đã đóng kết nối với peer {self.peer_addr}")
-        self.running = False
-        
-        # Đảm bảo xóa khỏi danh sách peer_connections của node
-        if hasattr(self.node, 'peer_connections') and self in self.node.peer_connections:
-            self.node.peer_connections.remove(self)
+        if self.running:
+            self.running = False  # Đặt running = False trước
+            
+            if hasattr(self, 'sock') and self.sock:
+                try:
+                    # Đóng socket an toàn
+                    try:
+                        self.sock.shutdown(socket.SHUT_RDWR)
+                    except OSError:
+                        pass  # Bỏ qua lỗi nếu socket đã đóng
+                    self.sock.close()
+                except Exception as e:
+                    print(f"Lỗi khi đóng socket: {e}")
+                finally:
+                    self.sock = None
+                
+                print(f"Đã đóng kết nối với peer {self.peer_address[0]}:{self.peer_address[1]}")
+            
+            # Đảm bảo xóa khỏi danh sách peer_connections của node
+            if hasattr(self.node, 'peer_connections') and self in self.node.peer_connections:
+                try:
+                    self.node.peer_connections.remove(self)
+                except ValueError:
+                    pass  # Bỏ qua nếu connection không còn trong list
