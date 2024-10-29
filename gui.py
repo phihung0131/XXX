@@ -60,29 +60,25 @@ class NodeGUI:
     def update_gui(self):
         """Cập nhật GUI mỗi giây"""
         try:
-            # Cập nhật thông tin tải xuống
             if self.node.current_magnet_link:
                 stats = self.node.download_manager.get_download_stats(self.node.current_magnet_link)
                 if stats:
-                    # Tính toán tiến độ dựa trên số piece đã nhận
-                    completed = stats['completed_pieces']
-                    total = stats['total_pieces']
-                    progress = (completed / total) * 100 if total > 0 else 0
-                    
                     # Cập nhật thanh tiến độ
-                    self.progress_var.set(progress)
+                    self.progress_var.set(stats['progress'])
                     
-                    # Cập nhật nhãn trạng thái
-                    self.status_label.config(text=f"Đã tải: {completed}/{total} pieces ({progress:.1f}%)")
+                    # Cập nhật thông tin trạng thái
+                    status = f"Đã tải: {stats['completed_pieces']}/{stats['total_pieces']} pieces "
+                    status += f"({stats['progress']:.1f}%) - {stats['speed']:.1f} KB/s"
+                    self.status_label.config(text=status)
                     
                     # Cập nhật thông tin chi tiết
                     details = f"Tên file: {self.node.current_file_name}\n"
                     details += f"Thời gian tải: {stats['duration']:.1f} giây\n"
-                    details += f"Số piece đã tải: {completed}/{total}\n"
-                    details += f"Tiến độ: {progress:.1f}%\n"
+                    details += f"Tốc độ tải: {stats['speed']:.1f} KB/s\n"
+                    details += f"Tiến độ: {stats['progress']:.1f}%\n"
+                    details += f"Pieces đã tải: {stats['completed_pieces']}/{stats['total_pieces']}\n"
                     
-                    # Thêm thông tin về nguồn tải
-                    if 'piece_sources' in stats:
+                    if stats['piece_sources']:
                         details += "\nNguồn tải:\n"
                         for piece, peer in stats['piece_sources'].items():
                             details += f"Piece {piece}: {peer['ip']}:{peer['port']}\n"
