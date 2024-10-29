@@ -229,7 +229,7 @@ class PeerConnection(threading.Thread):
             # Gửi HELLO nếu là leecher
             self.queue_message({"type": "HELLO"})
 
-        # Giữ kết nối cho đến khi một trong các thread dừng
+        # Giữ kết nối cho đến khi một trong các thread dừngg
         while self.running:
             if not (receive_thread.is_alive() and send_thread.is_alive()):
                 print("Một trong các thread đã dừng, kết thúc kết nối")
