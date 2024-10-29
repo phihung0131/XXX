@@ -42,7 +42,7 @@ class Node:
         self.shared_files = {}  # Lưu mapping giữa magnet link và thông tin file
         self.shared_files_path = os.path.join(self.node_data_dir, 'shared_files.json')
         self.load_shared_files()  # Load thông tin shared files khi khởi động
-        self.peer_connections = []  # Danh sách tất cả các kết nối đang hoạt động
+        self.peer_connections = []  # Thêm khởi tạo peer_connections
 
     def stop(self):
         self.running = False
@@ -723,11 +723,19 @@ class Node:
             # Ghép các piece thành file hoàn chỉnh
             self.combine_pieces()
             
-            # Ngắt tất cả kết nối
-            self.disconnect_all_peers()
+            # Ngắt kết nối với tất cả peer
+            for peer_conn in self.peer_connections:
+                peer_conn.cleanup()
+                
+            # In thống kê
+            self.print_download_statistics()
             
-            # Khởi động lại trạng thái lắng nghe nếu cần
-            self.start_listening()
+            print(f"Đã tải xong file: {self.current_file_name}")
+            
+            # Cập nhật trạng thái
+            self.current_file_name = None
+            self.current_magnet_link = None
+            self.peer_connections = []
             
         except Exception as e:
             print(f"Lỗi khi hoàn thành tải file: {e}")
@@ -746,17 +754,13 @@ class Node:
                     print(f"Piece {piece_index}: Tải từ {peer_info['ip']}:{peer_info['port']}")
 
     def disconnect_all_peers(self):
-        """Ngắt tất cả các kết nối peer"""
-        print("Đang ngắt kết nối với tất cả các peer...")
-        for conn in self.peer_connections[:]:  # Tạo bản sao để tránh lỗi khi xóa
+        """Ngắt kết nối với tất cả các peer"""
+        for peer_conn in list(self.peer_connections):  # Tạo bản sao để tránh lỗi khi xóa
             try:
-                conn.cleanup()
-                conn.join(timeout=2)  # Chờ thread kết thúc với timeout
+                peer_conn.cleanup()
+                self.peer_connections.remove(peer_conn)
             except Exception as e:
                 print(f"Lỗi khi ngắt kết nối peer: {e}")
-        self.peer_connections.clear()
-        print("Đã ngắt kết nối với tất cả các peer")
-
 
 
 
