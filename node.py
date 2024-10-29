@@ -717,6 +717,15 @@ class Node:
                 for piece_index, peer_info in stats['piece_sources'].items():
                     print(f"Piece {piece_index}: Tải từ {peer_info['ip']}:{peer_info['port']}")
 
+    def disconnect_all_peers(self):
+        """Ngắt kết nối với tất cả các peer"""
+        for peer_conn in list(self.peer_connections):  # Tạo bản sao để tránh lỗi khi xóa
+            try:
+                peer_conn.cleanup()
+                self.peer_connections.remove(peer_conn)
+            except Exception as e:
+                print(f"Lỗi khi ngắt kết nối peer: {e}")
+
 
 
 

@@ -85,11 +85,19 @@ class DownloadManager(threading.Thread):
             # Ghép các piece thành file hoàn chỉnh
             self.combine_pieces(magnet_link, download_info)
             print(f"Đã tải xong file: {download_info['file_name']}")
+            
+            # Ngắt kết nối với tất cả peer
+            self.node.disconnect_all_peers()
+            
+            # In thống kê
+            self.print_download_statistics(magnet_link)
+            
         except Exception as e:
             print(f"Lỗi khi hoàn thành tải file: {e}")
         finally:
             # Xóa thông tin download
-            del self.downloads[magnet_link]
+            if magnet_link in self.downloads:
+                del self.downloads[magnet_link]
 
     def piece_received(self, magnet_link, piece_index, piece_data):
         download_info = self.downloads.get(magnet_link)
