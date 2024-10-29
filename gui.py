@@ -51,24 +51,35 @@ class NodeGUI:
         self.upload_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
         # Treeview cho danh sách file chia sẻ
-        columns = ('size', 'pieces', 'peers', 'speed')
+        columns = ('name', 'size', 'pieces', 'peers', 'speed')
         self.shared_files = ttk.Treeview(self.upload_frame, columns=columns, show='headings')
+        self.shared_files.heading('name', text='Tên file')
         self.shared_files.heading('size', text='Kích thước')
         self.shared_files.heading('pieces', text='Pieces')
         self.shared_files.heading('peers', text='Peers')
         self.shared_files.heading('speed', text='Tốc độ')
         self.shared_files.pack(fill=tk.BOTH, expand=True)
         
-        # Khởi động cập nhật GUI định kỳ
+        # Khởi động cập nhật GUI và node
         self.update_gui()
-        
-        # Khởi chạy node
-        self.node_thread = threading.Thread(target=self.node.run)
-        self.node_thread.daemon = True
-        self.node_thread.start()
-        
-        # Xử lý đóng cửa sổ
-        master.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.start_node()
+
+    def get_file_info(self, magnet_link):
+        """Hàm bổ trợ để lấy thông tin file"""
+        try:
+            info = self.node.shared_files.get(magnet_link, {})
+            file_path = info.get('file_path', '')
+            if os.path.exists(file_path):
+                return {
+                    'name': info.get('file_name', ''),
+                    'size': os.path.getsize(file_path),
+                    'pieces': len(info.get('pieces', [])),
+                    'peers': len(info.get('peers', [])),
+                    'speed': info.get('upload_speed', 0)
+                }
+        except Exception as e:
+            print(f"Lỗi khi lấy thông tin file: {e}")
+        return None
 
     def update_gui(self):
         """Cập nhật GUI mỗi giây"""
@@ -94,44 +105,6 @@ class NodeGUI:
             print(f"Lỗi cập nhật GUI: {str(e)}")
         finally:
             self.master.after(1000, self.update_gui)
-
-    def update_shared_files(self):
-        """Cập nhật danh sách file đang chia sẻ"""
-        # Xóa danh sách cũ
-        for item in self.shared_files.get_children():
-            self.shared_files.delete(item)
-            
-        # Thêm thông tin file mới
-        for magnet_link, info in self.node.shared_files.items():
-            try:
-                # Lấy thông tin file từ torrent
-                torrent_info = self.node.get_decoded_torrent_info(magnet_link)
-                if torrent_info:
-                    file_size = torrent_info.get('length', 0)
-                    total_pieces = len(torrent_info.get('pieces', []))
-                    completed_pieces = len(info.get('completed_pieces', []))
-                    peers = len(info.get('peers', []))
-                    upload_speed = info.get('upload_speed', 0)
-                    
-                    values = (
-                        self.format_size(file_size),
-                        f"{completed_pieces}/{total_pieces}",
-                        str(peers),
-                        f"{upload_speed:.1f} KB/s"
-                    )
-                    
-                    self.shared_files.insert('', 'end', text=info.get('name', ''), values=values)
-                    
-            except Exception as e:
-                print(f"Lỗi khi cập nhật thông tin file {magnet_link}: {str(e)}")
-
-    @staticmethod
-    def format_size(size):
-        for unit in ['B', 'KB', 'MB', 'GB']:
-            if size < 1024:
-                return f"{size:.1f} {unit}"
-            size /= 1024
-        return f"{size:.1f} TB"
 
     def share_file(self):
         """Xử lý chia sẻ file"""
@@ -172,11 +145,45 @@ class NodeGUI:
                 else:
                     messagebox.showerror("Lỗi", "Dữ liệu peers không hợp lệ")
 
+    def start_node(self):
+        """Khởi động node trong thread riêng"""
+        self.node_thread = threading.Thread(target=self.node.run)
+        self.node_thread.daemon = True
+        self.node_thread.start()
+
     def on_closing(self):
         """Xử lý khi đóng cửa sổ"""
         if messagebox.askokcancel("Thoát", "Bạn có muốn thoát không?"):
             self.node.running = False
             self.master.destroy()
+
+    def update_shared_files(self):
+        """Cập nhật danh sách file chia sẻ"""
+        for item in self.shared_files.get_children():
+            self.shared_files.delete(item)
+            
+        for magnet_link, info in self.node.shared_files.items():
+            try:
+                file_info = self.get_file_info(magnet_link)
+                if file_info:
+                    self.shared_files.insert('', 'end', values=(
+                        file_info['name'],
+                        self.format_size(os.path.getsize(info['file_path'])),
+                        f"0/{file_info['pieces']}", 
+                        file_info['peers'],
+                        f"{file_info['speed']:.1f} KB/s"
+                    ))
+            except Exception as e:
+                print(f"Lỗi khi cập nhật thông tin file {magnet_link}: {str(e)}")
+
+    @staticmethod
+    def format_size(size):
+        """Format kích thước file"""
+        for unit in ['B', 'KB', 'MB', 'GB']:
+            if size < 1024:
+                return f"{size:.1f} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
 
 def main():
     root = tk.Tk()
