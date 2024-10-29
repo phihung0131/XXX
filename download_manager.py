@@ -161,3 +161,16 @@ class DownloadManager(threading.Thread):
             else:
                 # Tiếp tục tải các piece khác
                 self.request_multiple_pieces(magnet_link)
+
+    def get_download_stats(self, magnet_link):
+        """Lấy thống kê về quá trình tải"""
+        if magnet_link in self.downloads:
+            download_info = self.downloads[magnet_link]
+            return {
+                'start_time': download_info['start_time'],
+                'duration': time.time() - download_info['start_time'],
+                'total_pieces': len(download_info['peers_data']['pieces']),
+                'completed_pieces': len(download_info['completed_pieces']),
+                'piece_sources': download_info['piece_sources']
+            }
+        return None
