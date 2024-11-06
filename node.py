@@ -1,16 +1,228 @@
-import threading
-import socket
-import bencodepy
-import hashlib
-import time
-import requests
-import os
-import json
-import math
-from peer_connection import PeerConnection
-from download_manager import DownloadManager
+import threading, socket, os, json, math, base64, hashlib, requests, bencodepy, traceback, time
 from config import tracker_host
-import base64
+
+class PeerConnection(threading.Thread):
+    def __init__(self, node, peer_address, assigned_pieces=None, is_initiator=True):
+        threading.Thread.__init__(self)
+        # Các thuộc tính cơ bản
+        self.node = node
+        self.peer_address = peer_address
+        self.is_initiator = is_initiator  # True: Leecher, False: Seeder
+        self.assigned_pieces = assigned_pieces or []
+        self.sock = None
+        self.running = True
+
+        # Buffer và hàng đợi tin nhắn
+        self.message_queue = []
+        self.queue_lock = threading.Lock()
+        self.buffer = ""
+        self.MESSAGE_END = "\n"
+
+    def run(self):
+        try:
+            if self.is_initiator:
+                # Leecher: Kết nối đến peer
+                self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                self.sock.connect(self.peer_address)
+                self.handle_connection()
+            else:
+                # Seeder: Lắng nghe kết nối
+                server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                server_socket.bind(('0.0.0.0', self.node.port))
+                server_socket.listen(1)
+                
+                self.sock, _ = server_socket.accept()
+                server_socket.close()
+                self.handle_connection()
+        except Exception as e:
+            print(f"Lỗi kết nối: {e}")
+        finally:
+            self.cleanup()
+
+    def handle_connection(self):
+        # Khởi động threads xử lý tin nhắn
+        receive_thread = threading.Thread(target=self.receive_messages)
+        send_thread = threading.Thread(target=self.process_message_queue)
+        receive_thread.daemon = True
+        send_thread.daemon = True
+        receive_thread.start()
+        send_thread.start()
+
+        # Gửi tin nhắn HELLO nếu là leecher
+        if self.is_initiator:
+            self.queue_message({"type": "HELLO"})
+
+        # Duy trì kết nối
+        while self.running and receive_thread.is_alive() and send_thread.is_alive():
+            threading.Event().wait(1)
+
+    def queue_message(self, message):
+        """Thêm tin nhắn vào hàng đợi"""
+        with self.queue_lock:
+            self.message_queue.append(message)
+
+    def process_message_queue(self):
+        """Xử lý và gửi tin nhắn trong hàng đợi"""
+        while self.running:
+            try:
+                with self.queue_lock:
+                    if self.message_queue:
+                        self.send_message(self.message_queue.pop(0))
+                threading.Event().wait(0.1)
+            except Exception as e:
+                print(f"Lỗi xử lý hàng đợi: {e}")
+                break
+
+    def send_message(self, message):
+        """Gửi tin nhắn qua socket"""
+        try:
+            data = json.dumps(message) + self.MESSAGE_END
+            self.sock.sendall(data.encode('utf-8'))
+        except Exception as e:
+            print(f"Lỗi gửi tin nhắn: {e}")
+
+    def receive_messages(self):
+        """Nhận và xử lý tin nhắn"""
+        while self.running:
+            try:
+                data = self.sock.recv(4096)
+                if not data:
+                    break
+                    
+                self.buffer += data.decode('utf-8')
+                while self.MESSAGE_END in self.buffer:
+                    message, self.buffer = self.buffer.split(self.MESSAGE_END, 1)
+                    if message:
+                        self.handle_message(json.loads(message))
+            except Exception as e:
+                print(f"Lỗi nhận tin nhắn: {e}")
+                break
+
+    def handle_message(self, message):
+        """Xử lý tin nhắn nhận được"""
+        try:
+            message_type = message.get('type')
+            if message_type == "HELLO":
+                if not self.is_initiator:
+                    self.queue_message({"type": "HELLO_ACK"})
+            elif message_type == "HELLO_ACK":
+                if self.is_initiator:
+                    self.request_pieces()
+            elif message_type == "REQUEST_PIECE":
+                if not self.is_initiator:
+                    piece_index = message.get('piece_index')
+                    magnet_link = message.get('magnet_link')
+                    piece_data = self.node.get_piece_data(magnet_link, piece_index)
+                    if piece_data:
+                        self.queue_message({
+                            "type": "PIECE_DATA",
+                            "piece_index": piece_index,
+                            "data": base64.b64encode(piece_data).decode('utf-8')
+                        })
+            elif message_type == "PIECE_DATA":
+                if self.is_initiator:
+                    piece_index = message.get('piece_index')
+                    piece_data = base64.b64decode(message.get('data'))
+                    self.node.handle_received_piece(piece_index, piece_data)
+        except Exception as e:
+            print(f"Lỗi xử lý tin nhắn: {e}")
+
+    def request_pieces(self):
+        """Yêu cầu các piece được gán"""
+        for piece_index in self.assigned_pieces:
+            if piece_index in self.node.get_needed_pieces():
+                self.queue_message({
+                    "type": "REQUEST_PIECE",
+                    "piece_index": piece_index,
+                    "magnet_link": self.node.current_magnet_link
+                })
+
+    def cleanup(self):
+        """Dọn dẹp kết nối"""
+        self.running = False
+        if self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
+            finally:
+                self.sock.close()
+                self.sock = None
+
+class DownloadManager(threading.Thread):
+    def __init__(self, node):
+        threading.Thread.__init__(self)
+        self.node = node
+        self.downloads = {}  # {magnet_link: download_info}
+    
+    def run(self):
+        while self.node.running:  # Thay vì while True
+            # Kiểm tra các file đang tải
+            for magnet_link, download_info in list(self.downloads.items()):
+                if all(download_info['pieces']):
+                    self.finish_download(magnet_link, download_info)
+                else:
+                    self.request_next_piece(magnet_link, download_info)
+            
+            # Đợi một khoảng thời gian trước khi kiểm tra lại
+            threading.Event().wait(5)
+
+    def finish_download(self, magnet_link, download_info):
+        """Hoàn thành quá trình tải"""
+        try:
+            # Ghép các piece thành file hoàn chỉnh
+            self.combine_pieces(magnet_link, download_info)
+            print(f"Đã tải xong file: {download_info['file_name']}")
+            
+            # Ngắt tất cả các kết nối đang hoạt động cho download này
+            for conn in download_info['connections']:
+                try:
+                    conn.cleanup()
+                except Exception as e:
+                    print(f"Lỗi khi ngắt kết nối: {e}")
+            download_info['connections'].clear()
+            
+            # Ngắt kết nối với tất cả peer từ node
+            self.node.disconnect_all_peers()         
+            
+        except Exception as e:
+            print(f"Lỗi khi hoàn thành tải file: {e}")
+        finally:
+            # Xóa thông tin download
+            if magnet_link in self.downloads:
+                del self.downloads[magnet_link]
+                if all(download_info['pieces']):
+                    self.node.start_listening()
+                # Yêu cầu lại piece không hợp lệ
+
+    def piece_completed(self, magnet_link, piece_index):
+        """Xử lý khi một piece được tải xong"""
+        download_info = self.downloads.get(magnet_link)
+        if download_info:
+            # Cập nhật trạng thái
+            download_info['active_pieces'].remove(piece_index)
+            download_info['completed_pieces'].add(piece_index)
+            
+            # Kiểm tra nếu tải xong
+            if len(download_info['completed_pieces']) == len(download_info['peers_data']['pieces']):
+                self.finish_download(magnet_link, download_info)
+            else:
+                # Tiếp tục tải các piece khác
+                download_info = self.downloads[magnet_link]
+                pieces_info = download_info['peers_data']['pieces']
+                
+                # Chọn các cặp piece-peer 
+                selected_pairs = [(piece['piece_index'], piece['nodes'][0]) for piece in pieces_info if piece['nodes']]
+                
+                for piece_index, peer in selected_pairs:
+                    if piece_index not in download_info['active_pieces']:
+                        # Tạo kết nối mới và yêu cầu piece
+                        peer_conn = self.node.connect_and_request_piece(peer, piece_index)
+                        if peer_conn:
+                            download_info['connections'].add(peer_conn)
+                            download_info['active_pieces'].add(piece_index)
+                            download_info['piece_sources'][piece_index] = peer
 
 class Node:
     def __init__(self):
@@ -551,27 +763,11 @@ class Node:
 
     def disconnect_all_peers(self):
         """Ngắt tất cả các kết nối peer"""
-        print("Đang ngắt kết nối với tất cả các peer...")
-        # Tạo bản sao để tránh lỗi khi xóa trong vòng lặp
         for peer_conn in list(self.peer_connections):
             try:
                 peer_conn.cleanup()
-                peer_conn.join(timeout=1)  # Chờ thread kết thúc với timeout
-                self.peer_connections.remove(peer_conn)
+                peer_conn.join(timeout=1)
+                self.peer_connections.remove(peer_conn) 
             except Exception as e:
-                print(f"Lỗi khi ngắt kết nối peer: {e}")
-        
-        self.peer_connections.clear()  # Đảm bảo danh sách trốngg
-        print("Đã ngắt kết nối với tất cả các peer")
-
-
-
-
-
-
-
-
-
-
-
-
+                print(f"Lỗi khi ngắt kết nối: {e}")
+        self.peer_connections.clear()
