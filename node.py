@@ -14,10 +14,9 @@ import base64
 
 class Node:
     def __init__(self):
-        # Thêm vào đầu __init__
         self.running = True
-        self.config_file = 'node_config.json'
-        self.load_or_create_config()
+        self.ip = self.get_ip()
+        self.port = 52229
         self.peers = []
         self.tracker_url = f"{tracker_host}/api/nodes"
         self.file_share_url = f"{tracker_host}/api/files"
@@ -32,7 +31,7 @@ class Node:
         os.makedirs(self.pieces_dir, exist_ok=True)
         os.makedirs(self.downloads_dir, exist_ok=True)
         self.current_magnet_link = None
-        self.current_file_name = None  # Thêm dòng này
+        self.current_file_name = None 
         self.shared_files = {}  # Lưu mapping giữa magnet link và thông tin file
         self.shared_files_path = os.path.join(self.node_data_dir, 'shared_files.json')
         self.load_shared_files()  # Load thông tin shared files khi khởi động
@@ -40,21 +39,6 @@ class Node:
 
     def stop(self):
         self.running = False
-
-    def load_or_create_config(self):
-        if os.path.exists(self.config_file):
-            with open(self.config_file, 'r') as f:
-                config = json.load(f)
-            # Luôn cập nhật IP và sử dụng port 52229
-            self.ip = self.get_ip()
-            self.port = 52229
-        else:
-            self.ip = self.get_ip()
-            self.port = 52229
-        
-        # Lưu cấu hnh
-        with open(self.config_file, 'w') as f:
-            json.dump({'ip': self.ip, 'port': self.port}, f)
 
     def get_ip(self):
         try:
@@ -68,16 +52,7 @@ class Node:
             # Nếu không thể kết nối, trả về địa chỉ loopback
             return "127.0.0.1"
 
-    # def connect_to_peers(self):
-    #     for peer_data in self.peers:
-    #         peer_ip = peer_data['ip']
-    #         peer_port = peer_data['port']
-    #         print(f"Đang kết nối với peer: {peer_ip}:{peer_port}")
-    #         PeerConnection(self, (peer_ip, peer_port)).start()
-
     def run(self):
-        print("======================VVVVVVVVV=========================")
-        print(f"Node đang chạy trên IP: {self.ip}, Port: {self.port}")
         # Thông báo lần đầu đến tracker
         initial_response = self.announce_to_tracker()
         if initial_response:
@@ -89,7 +64,6 @@ class Node:
         announce_thread.start()
 
         # Các chức năng khác của node
-        # self.connect_to_peers()
         self.download_manager.start()
 
     def announce_to_tracker(self):
@@ -99,19 +73,15 @@ class Node:
         }
         try:
             response = requests.post(self.tracker_url, json=data, timeout=10)
-            if response.status_code == 200:
-                return response.json()
-            else:
-                print(f"Lỗi khi thông báo đến tracker: {response.status_code}")
-                print(f"Nội dung phản hồi: {response.text}")
-        except requests.RequestException as e:
+            return response.json() if response.status_code == 200 else None
+        except Exception as e:
             print(f"Lỗi kết nối đến tracker: {e}")
-            print(f"Chi tiết lỗi: {str(e)}")
+            return None
 
     def periodic_announce(self):
         while self.running:  # Thay vì while True
             self.announce_to_tracker()
-            time.sleep(120)  # Đợi 2 phút
+            time.sleep(300)  # Đợi 5 phút
 
     def share_file(self, file_path, callback=None):
         """Chia sẻ file với mạng ngang hàng"""
@@ -218,7 +188,7 @@ class Node:
             "magnet_text": magnet_link
         }
         try:
-            url = f"{self.file_share_url}/peers"  # Đảm bảo endpoint đúng
+            url = f"{self.file_share_url}/peers" 
             response = requests.post(url, json=data)
             if response.status_code == 200:
                 data = response.json()
@@ -507,23 +477,10 @@ class Node:
             self.download_manager.piece_completed(self.current_magnet_link, piece_index)
             
             # Kiểm tra nếu đã tải xong
-            if self.check_download_complete():
-                self.finish_download()
+            self.finish_download()
         else:
             print(f"Piece {piece_index} không hợp lệ")
             self.download_manager.piece_failed(self.current_magnet_link, piece_index)
-
-    def check_download_complete(self):
-        """Kiểm tra xem đã tải đủ các piece chưa"""
-        piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
-        if not os.path.exists(piece_dir):
-            return False
-            
-        torrent_info = self.get_decoded_torrent_info()
-        total_pieces = len(torrent_info['pieces'])
-        
-        existing_pieces = [f for f in os.listdir(piece_dir) if f.startswith('piece_')]
-        return len(existing_pieces) == total_pieces
 
     def get_needed_pieces(self):
         """Lấy danh sách các piece còn thiếu"""
@@ -561,25 +518,36 @@ class Node:
             print(f"Lỗi khi lưu shared files: {e}")
 
     def finish_download(self):
+        """Kiểm tra xem đã tải đủ các piece chưa"""
+        piece_dir = os.path.join(self.pieces_dir, self.current_file_name)
+        if not os.path.exists(piece_dir):
+            return False
+            
+        torrent_info = self.get_decoded_torrent_info()
+        total_pieces = len(torrent_info['pieces'])
+        
+        existing_pieces = [f for f in os.listdir(piece_dir) if f.startswith('piece_')]
+
         """Xử lý khi tải file hoàn tất"""
-        try:
-            # Ghép các piece thành file hoàn chỉnh
-            self.combine_pieces()
-            
-            # Ngắt kết nối với tất cả peer
-            for peer_conn in self.peer_connections:
-                peer_conn.cleanup()
+        if len(existing_pieces) == total_pieces:
+            try:
+                # Ghép các piece thành file hoàn chỉnh
+                self.combine_pieces()
                 
-            
-            print(f"Đã tải xong file: {self.current_file_name}")
-            
-            # Cập nhật trạng thái
-            self.current_file_name = None
-            self.current_magnet_link = None
-            self.peer_connections = []
-            
-        except Exception as e:
-            print(f"Lỗi khi hoàn thành tải file: {e}")
+                # Ngắt kết nối với tất cả peer
+                for peer_conn in self.peer_connections:
+                    peer_conn.cleanup()
+                    
+                
+                print(f"Đã tải xong file: {self.current_file_name}")
+                
+                # Cập nhật trạng thái
+                self.current_file_name = None
+                self.current_magnet_link = None
+                self.peer_connections = []
+                
+            except Exception as e:
+                print(f"Lỗi khi hoàn thành tải file: {e}")
 
     def disconnect_all_peers(self):
         """Ngắt tất cả các kết nối peer"""

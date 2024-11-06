@@ -45,7 +45,6 @@ class DownloadManager(threading.Thread):
             if magnet_link in self.downloads:
                 del self.downloads[magnet_link]
                 if all(download_info['pieces']):
-                    # Khởi động lại trạng thái lắng nghee
                     self.node.start_listening()
                 # Yêu cầu lại piece không hợp lệ
 
@@ -57,16 +56,6 @@ class DownloadManager(threading.Thread):
             download_info['active_pieces'].remove(piece_index)
             download_info['completed_pieces'].add(piece_index)
             
-            # Cập nhật thống kê cho peer
-            peer = download_info['piece_sources'].get(piece_index)
-            if peer:
-                peer_id = f"{peer['ip']}:{peer['port']}"
-                self.peer_selector.update_peer_stats(
-                    peer_id, 
-                    download_speed=1.0,  # Có thể tính toán tốc độ thực tế
-                    success=True
-                )
-            
             # Kiểm tra nếu tải xong
             if len(download_info['completed_pieces']) == len(download_info['peers_data']['pieces']):
                 self.finish_download(magnet_link, download_info)
@@ -76,7 +65,7 @@ class DownloadManager(threading.Thread):
                 pieces_info = download_info['peers_data']['pieces']
                 
                 # Chọn các cặp piece-peer tốt nhất
-                selected_pairs = self.peer_selector.select_best_peers_for_pieces(pieces_info)
+                selected_pairs = self.peer_selector.select_peers(pieces_info)
                 
                 for piece_index, peer in selected_pairs:
                     if piece_index not in download_info['active_pieces']:
