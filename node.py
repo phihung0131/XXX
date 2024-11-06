@@ -139,15 +139,20 @@ class PeerConnection(threading.Thread):
                 })
 
     def cleanup(self):
-        """Dọn dẹp kết nối"""
-        if self.sock:
+        """Dọn dẹp và đóng kết nối an toàn"""
+        if hasattr(self, 'sock') and self.sock:
             try:
-                self.sock.shutdown(socket.SHUT_RDWR)
-            except:
-                pass
-            finally:
+                try:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass  # Bỏ qua lỗi nếu socket đã đóng
                 self.sock.close()
+            except Exception as e:
+                print(f"Lỗi khi đóng socket: {e}")
+            finally:
                 self.sock = None
+        
+        print(f"Đã đóng kết nối với peer {self.peer_address[0]}:{self.peer_address[1]}")
 
 class DownloadManager(threading.Thread):
     def __init__(self, node):
