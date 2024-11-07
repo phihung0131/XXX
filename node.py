@@ -216,7 +216,7 @@ class DownloadManager(threading.Thread):
         self.downloads = {}  # {magnet_link: download_info}
     
     def run(self):
-        while self.node.running:  # Thay vì while True
+        while self.node.running: 
             # Kiểm tra các file đang tải
             for magnet_link, download_info in list(self.downloads.items()):
                 if all(download_info['pieces']):
@@ -508,32 +508,6 @@ class Node:
     def start_listening(self):
         listener = PeerConnection(self, ('0.0.0.0', self.port), is_initiator=False)
         listener.start()
-
-    def find_peer_with_piece(self, peers_data, piece_index):
-        """Tìm peer có piece cần thiết"""
-        try:
-            if isinstance(peers_data, dict) and 'pieces' in peers_data:
-                pieces = peers_data['pieces']
-                print(f"Tìm kiếm piece {piece_index} trong danh sách: {pieces}")  # Debug log
-                
-                # Tìm piece theo index
-                for piece in pieces:
-                    if piece.get('piece_index') == piece_index:
-                        nodes = piece.get('nodes', [])
-                        if nodes:
-                            print(f"Tìm thấy peer cho piece {piece_index}: {nodes[0]}")
-                            return nodes[0]
-                
-                print(f"Không tìm thấy peer nào có piece {piece_index}")
-                print(f"Cấu trúc pieces: {pieces}")
-            else:
-                print("Dữ liệu peers không đúng định dạng")
-                print(f"Peers data: {peers_data}")
-        except Exception as e:
-            print(f"Lỗi khi tìm peer: {e}")
-            print(f"Peers data: {peers_data}")
-            print(f"Chi tiết lỗi: {traceback.format_exc()}")
-        return None
 
     def connect_and_request_pieces(self, peers_data):
         """Tạo nhiều kết nối và phân phối pieces"""
