@@ -39,6 +39,10 @@ class NodeGUI:
         self.status_label = ttk.Label(progress_frame, text="")
         self.status_label.pack(fill=tk.X, pady=5)
         
+        self.copy_button = ttk.Button(progress_frame, text="Copy Magnet Link", command=self.copy_magnet_link)
+        self.copy_button.pack(fill=tk.X, pady=5)
+        self.copy_button.pack_forget()  # Hide the button initially
+        
         # Frame thông tin chi tiết
         details_frame = ttk.LabelFrame(main_frame, text="Thông tin chi tiết", padding="5")
         details_frame.pack(fill=tk.BOTH, expand=True, pady=5)
@@ -113,9 +117,16 @@ class NodeGUI:
         self.progress_var.set(progress)
         if magnet_link and torrent_path:
             self.status_label.config(text=f"File đã được chia sẻ.\nMagnet link: {magnet_link}\nTorrent file: {torrent_path}")
+            self.magnet_link = magnet_link  # Store the magnet link
+            self.copy_button.pack(fill=tk.X, pady=5)  # Show the copy button
         else:
             self.status_label.config(text=f"Đang xử lý: {current}/{total} pieces")
         self.master.update_idletasks()
+
+    def copy_magnet_link(self):
+        self.master.clipboard_clear()
+        self.master.clipboard_append(self.magnet_link)
+        messagebox.showinfo("Thông báo", "Magnet link đã được sao chép vào clipboard.")
 
     def download_file(self):
         magnet_link = simpledialog.askstring("Tải file", "Nhập magnet link:")
