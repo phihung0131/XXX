@@ -39,15 +39,28 @@ class PeerConnection(threading.Thread):
         print(f"{self.role}: Connected successfully")
 
     def _listen_as_seeder(self):
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM) 
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind(('0.0.0.0', self.node.port))
-        server_socket.listen(1)
-        print(f"{self.role}: Listening on port {self.node.port}")
-        
-        self.sock, client_address = server_socket.accept()
-        print(f"{self.role}: Accepted connection from {client_address[0]}:{client_address[1]}")
-        server_socket.close()
+        try:
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            self.server_socket.settimeout(1)  # Add timeout
+            self.server_socket.bind(('0.0.0.0', self.node.port))
+            self.server_socket.listen(1)
+            print(f"{self.role}: Listening on port {self.node.port}")
+            
+            while self.running:
+                try:
+                    self.sock, client_address = self.server_socket.accept()
+                    print(f"{self.role}: Accepted connection from {client_address[0]}:{client_address[1]}")
+                    break
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    print(f"{self.role}: Accept error: {e}")
+                    break
+            self.server_socket.close()
+        except Exception as e:
+            print(f"{self.role}: Listen error: {e}")
+            raise
 
     def handle_connection(self):
         receive_thread = threading.Thread(target=self._receive_messages)
@@ -185,29 +198,34 @@ class PeerConnection(threading.Thread):
 
     def cleanup(self):
         """Clean up connection and restart listening if seeder"""
-        try:
-            self.running = False
-            if self.sock:
-                try:
-                    self.sock.shutdown(socket.SHUT_RDWR)
-                except:
-                    pass
-                self.sock.close()
-                self.sock = None
+        
+        # Close client socket
+        if hasattr(self, 'sock') and self.sock:
+            try:
+                self.sock.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
+            self.sock.close()
+            self.sock = None
 
-            # Restart listening if this was a seeder connection
-            if not self.is_initiator:
-                print(f"{self.role}: Restarting listening state...")
-                try:
-                    # Remove self from node's peer connections if present
-                    if self in self.node.peer_connections:
-                        self.node.peer_connections.remove(self)
-                    # Start new listener
-                    self.node.start_listening()
-                except Exception as e:
-                    print(f"{self.role}: Error restarting listener: {e}")
-        except Exception as e:
-            print(f"{self.role}: Cleanup error: {e}")
+        # Close server socket
+        if hasattr(self, 'server_socket') and self.server_socket:
+            try:
+                self.server_socket.close()
+            except:
+                pass
+            
+        # Remove from node's peer connections
+        if self in self.node.peer_connections:
+            self.node.peer_connections.remove(self)
+
+        # Restart listener if this was a seeder
+        if not self.is_initiator:
+            print(f"{self.role}: Restarting listening state...")
+            try:
+                self.node.start_listening()
+            except Exception as e:
+                print(f"{self.role}: Error restarting listener: {e}")
 
 class DownloadManager(threading.Thread):
     def __init__(self, node):
@@ -342,6 +360,7 @@ class Node:
         """Stop the node"""
         self.running = False
         self.disconnect_all_peers()
+        time.sleep(1)  # Give time for sockets to close
         
     def share_file(self, file_path, callback=None):
         """Share a file on the network"""
