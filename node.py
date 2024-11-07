@@ -173,16 +173,42 @@ class PeerConnection(threading.Thread):
         with self.queue_lock:
             self.message_queue.append(message_dict)
 
+    def start_listening(self):
+        """Start a new seeder connection to listen for incoming peers"""
+        try:
+            listener = PeerConnection(self, ('0.0.0.0', self.port), is_initiator=False)
+            self.peer_connections.append(listener)
+            listener.start()
+            print(f"Started new listener on port {self.port}")
+        except Exception as e:
+            print(f"Error starting listener: {e}")
+
     def cleanup(self):
-        self.running = False
-        if self.sock:
-            try:
-                self.sock.shutdown(socket.SHUT_RDWR)
-            except:
-                pass
-            self.sock.close()
-            self.sock = None
-            
+        """Clean up connection and restart listening if seeder"""
+        try:
+            self.running = False
+            if self.sock:
+                try:
+                    self.sock.shutdown(socket.SHUT_RDWR)
+                except:
+                    pass
+                self.sock.close()
+                self.sock = None
+
+            # Restart listening if this was a seeder connection
+            if not self.is_initiator:
+                print(f"{self.role}: Restarting listening state...")
+                try:
+                    # Remove self from node's peer connections if present
+                    if self in self.node.peer_connections:
+                        self.node.peer_connections.remove(self)
+                    # Start new listener
+                    self.node.start_listening()
+                except Exception as e:
+                    print(f"{self.role}: Error restarting listener: {e}")
+        except Exception as e:
+            print(f"{self.role}: Cleanup error: {e}")
+
 class DownloadManager(threading.Thread):
     def __init__(self, node):
         threading.Thread.__init__(self)
